@@ -16,7 +16,7 @@ timezone: America/Vancouver
 
 title: Simon Ryu # the main title
 
-tagline: Personal Blog # it will display as the sub-title
+tagline: My Personal Blog # it will display as the sub-title
 
 description: >- # used by seo meta and the atom feed
   blog, simonryu, simonryu328, simonryu328hub.io, simonryu328.github.io
@@ -28,8 +28,8 @@ url: "https://simonryu328.github.io"
 github:
   username: simonryu328 # change to your github username
 
-twitter:
-  username: twitter_username # change to your twitter username
+# twitter:
+#   username: twitter_username # change to your twitter username
 
 social:
   # Change to your full name.
