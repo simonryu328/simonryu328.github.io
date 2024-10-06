@@ -1,6 +1,6 @@
 ---
 title: Building an advanced Golf Instruction Chatbot
-date: 2023-04-14
+date: 2024-03-27
 categories: [ML, LLMs, Retrieval Augmented Generation]
 tags: [ML, LLMs, Retrieval Augmented Generation, Python]
 ---
