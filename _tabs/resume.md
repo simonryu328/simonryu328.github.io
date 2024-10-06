@@ -4,7 +4,7 @@ icon: fas fa fa-book
 order: 4
 ---
 
-# EDUCATION
+## EDUCATION
 #### THE UNIVERSITY OF BRITISH COLUMBIA
 > **Bachelor of Applied Science, Major in Engineering Physics**  
 > *Vancouver, BC*  
@@ -15,7 +15,7 @@ order: 4
 - **ML/AI:** PyTorch | Tensorflow | JAX | Jupyter | SciPy | scikit-learn | Plotly
 - **Tools:** Git | Docker | AWS | IBM Cloud | Snowflake | Airflow -->
 
-# PROFESSIONAL EXPERIENCE
+## PROFESSIONAL EXPERIENCE
 
 > #### OUTLIER
 > **Software Engineer for Artificial Intelligence Training Data**  
@@ -53,7 +53,7 @@ order: 4
 > - Designed and executed comprehensive test suites for cloud-based ETL processes in AWS S3 and DynamoDB.
 > - Developed automation scripts using Boto3, AWS SDK for Python, to ensure scalability and performance of cloud services.
 
-# PROJECTS
+## PROJECTS
 
 > #### Overvoice.AI
 > - Developed a LLM application leveraging GPT-4's vision capabilities and text-to-speech technologies for automated generation of voice-overs for video contents. Developed in > React and Next.js.
