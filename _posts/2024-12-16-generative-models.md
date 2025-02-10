@@ -5,15 +5,15 @@ categories: [ML, LLMs, RLHF, Math]
 tags: [ML, LLMs, RLHF, Math]
 ---
 
-# **Advancements in Video Generation: A Deep Dive into Diffusion Models and VAEs**
+## Introduction
 
 Generative AI has seen remarkable advancements across domains like image, video, and text generation. This blog explores how **diffusion models** and **variational autoencoders (VAEs)** contribute to video generation, with insights drawn from a recent video diffusion project. We'll also analyze their integration, strengths, and limitations, concluding with recommendations for scaling and ethical considerations.
 
 ---
 
-### **Understanding the Mechanisms**
+## Understanding the Mechanisms
 
-### **Diffusion Models**
+### Diffusion Models**
 
 Diffusion models iteratively learn to denoise data corrupted by noise. This process, modeled as a Markov chain or SDE, improves data fidelity step-by-step. The architecture incorporates:
 
@@ -22,7 +22,7 @@ Diffusion models iteratively learn to denoise data corrupted by noise. This proc
 
 In practice, diffusion models are computationally intensive but excel in generating high-fidelity frames for video sequences.
 
-### **Variational Autoencoders (VAEs)**
+### Variational Autoencoders (VAEs)
 
 VAEs encode input data into a latent space and decode it back to the original form. The core components include:
 
@@ -33,7 +33,7 @@ Training optimizes a lower bound (ELBO), balancing reconstruction quality and re
 
 ---
 
-### **A Comparison of Diffusion Models and VAEs**
+## A Comparison of Diffusion Models and VAEs
 
 | **Aspect** | **Diffusion Models** | **VAEs** |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ Training optimizes a lower bound (ELBO), balancing reconstruction quality and re
 
 ---
 
-### **Hybrid Integration for Video Generation**
+## Hybrid Integration for Video Generation
 
 In a recent project, we combined VAEs and diffusion models to leverage their complementary strengths. Here's the process:
 
@@ -56,7 +56,7 @@ In a recent project, we combined VAEs and diffusion models to leverage their com
 
 ---
 
-### **Key Results and Insights**
+## Key Results and Insights
 
 - **Training Optimizations**: Parallel data loading and batch adjustments improved training speed by over 10,000%.
 - **Artifact Reduction**: Introducing channel normalization and adjusting KL divergence weight eliminated reconstruction artifacts.
@@ -66,21 +66,7 @@ Generated videos, though promising, highlighted areas needing improvement, such 
 
 ---
 
-### **Ethical Considerations**
-
-### **Diffusion Models**
-
-- **Concern**: Realistic deepfakes can propagate misinformation.
-- **Mitigation**: Embed robust watermarks and use detection tools for synthetic content.
-
-### **VAEs**
-
-- **Concern**: Training data biases can lead to unfair outputs.
-- **Mitigation**: Diversify datasets and implement fairness-aware training.
-
----
-
-### **Looking Ahead**
+## Looking Ahead
 
 To further enhance video generation, future work includes:
 
