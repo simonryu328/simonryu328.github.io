@@ -16,7 +16,7 @@ timezone: America/Vancouver
 
 title: Simon Ryu # the main title
 
-tagline: My Personal Blog # it will display as the sub-title
+tagline: AI Engineer at IBM # it will display as the sub-title
 
 description: >- # used by seo meta and the atom feed
   blog, simonryu, simonryu328, simonryu328hub.io, simonryu328.github.io
