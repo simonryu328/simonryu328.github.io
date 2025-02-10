@@ -17,6 +17,13 @@ order: 4
 
 ## PROFESSIONAL EXPERIENCE
 
+> #### IBM
+> **AI Engineer**  
+> *Toronto, ON*  
+> *Jan 2025-Present*
+> - Develop pilots to validate and highlight the feasibility and effectiveness of the proposed AI solutions.
+> - Collaborate with cross-functional teams to implement and iterate on pilots, ensuring alignment with customer requirements and expectations while adhering to best practices and quality standards.
+
 > #### OUTLIER
 > **Software Engineer for Artificial Intelligence Training Data**  
 > *Vancouver, BC*  
