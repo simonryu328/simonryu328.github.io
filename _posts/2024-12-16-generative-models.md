@@ -5,7 +5,7 @@ categories: [ML, LLMs, RLHF, Math]
 tags: [ML, LLMs, RLHF, Math]
 ---
 
-### **Advancements in Video Generation: A Deep Dive into Diffusion Models and VAEs**
+# **Advancements in Video Generation: A Deep Dive into Diffusion Models and VAEs**
 
 Generative AI has seen remarkable advancements across domains like image, video, and text generation. This blog explores how **diffusion models** and **variational autoencoders (VAEs)** contribute to video generation, with insights drawn from a recent video diffusion project. We'll also analyze their integration, strengths, and limitations, concluding with recommendations for scaling and ethical considerations.
 
