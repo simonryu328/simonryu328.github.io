@@ -5,7 +5,6 @@ categories: [ML, LLMs, RLHF, Math]
 tags: [ML, LLMs, RLHF, Math]
 ---
 
----
 ## Introduction
 
 Reinforcement Learning from Human Feedback (RLHF) has emerged as a powerful technique for fine-tuning Large Language Models (LLMs), enabling them to align more closely with human preferences and produce higher-quality outputs. This blog post delves into the intricacies of RLHF, exploring its methodology, implementation challenges, and the impact it has had on the field of natural language processing.
