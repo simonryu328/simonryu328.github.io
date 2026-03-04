@@ -19,7 +19,7 @@ title: Simon Ryu # the main title
 tagline: AI Engineer at IBM # it will display as the sub-title
 
 description: >- # used by seo meta and the atom feed
-  blog, simonryu, simonryu328, simonryu328hub.io, simonryu328.github.io
+  AI Engineer writing about production ML systems, LLM infrastructure, and building AI companions.
 
 # Fill in the protocol & hostname for your site.
 # e.g. 'https://username.github.io', note that it does not end with a '/'.
@@ -35,13 +35,11 @@ social:
   # Change to your full name.
   # It will be displayed as the default author of the posts and the copyright owner in the Footer
   name: Simon Ryu
-  email: simonryu328@gmail.com.com # change to your email address
+  email: simonryu328@gmail.com # change to your email address
   links:
     # The first element serves as the copyright owner's link
     - https://github.com/simonryu328 # change to your github homepage
-    # Uncomment below to add more social links
-    # - https://www.facebook.com/username
-    # - https://www.linkedin.com/in/username
+    - https://www.linkedin.com/in/simon-ryu-vancouver/
 
 # Site Verification Settings
 webmaster_verifications:
@@ -85,7 +83,7 @@ pageviews:
 #     light  - Use the light color scheme
 #     dark   - Use the dark color scheme
 #
-theme_mode: light # [light | dark]
+theme_mode: # [light | dark]
 
 # The CDN endpoint for media resources.
 # Notice that once it is assigned, the CDN url

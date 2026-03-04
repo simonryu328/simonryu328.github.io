@@ -3,6 +3,9 @@ title: "Building a Production AI Companion on Telegram"
 date: 2026-03-04
 categories: [AI, Software Engineering]
 tags: [Telegram, FastAPI, LLM, Python, Claude, LiteLLM, Prompt Engineering]
+image:
+  path: /assets/img/aki-companion/cover.png
+  alt: "Telegram chat interface connected to FastAPI, PostgreSQL, and AI infrastructure"
 ---
 
 Most AI chatbot tutorials end at the same place: call the API, return the response. But when you try to ship a real product, you quickly discover that the API call is maybe 10% of the work. The other 90% is everything nobody tells you about — message timing, cost management, memory architecture, and making the whole thing actually feel *alive*.
