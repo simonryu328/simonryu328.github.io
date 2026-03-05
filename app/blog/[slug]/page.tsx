@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import { getPostBySlug, getAllSlugs } from "@/lib/blog";
 import { mdxComponents } from "@/components/mdx-components";
+import rehypePrettyCode from "rehype-pretty-code";
 import type { Metadata } from "next";
 
 interface Props {
@@ -29,6 +30,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         },
     };
 }
+
+const mdxOptions = {
+    rehypePlugins: [
+        [
+            rehypePrettyCode,
+            {
+                theme: "github-dark",
+                keepBackground: true,
+            },
+        ],
+    ],
+};
 
 export default async function BlogPost({ params }: Props) {
     const { slug } = await params;
@@ -82,7 +95,8 @@ export default async function BlogPost({ params }: Props) {
 
             {/* Content */}
             <div className="prose">
-                <MDXRemote source={post.content} components={mdxComponents} />
+                {/* @ts-expect-error rehype plugin typing */}
+                <MDXRemote source={post.content} components={mdxComponents} options={{ mdxOptions }} />
             </div>
         </article>
     );
