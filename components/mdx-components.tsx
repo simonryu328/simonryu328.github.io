@@ -31,18 +31,18 @@ export const mdxComponents: MDXComponents = {
     blockquote: (props) => (
         <blockquote className="border-l-3 border-neutral-300 dark:border-neutral-600 pl-4 my-4 text-neutral-600 dark:text-neutral-400 italic" {...props} />
     ),
-    code: (props) => {
-        // Inline code (not inside a pre)
-        const isInline = typeof props.children === "string";
-        if (isInline) {
-            return (
-                <code className="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-sm font-mono text-neutral-800 dark:text-neutral-200" {...props} />
-            );
+    code: ({ children, className, ...props }) => {
+        // If it has a className (e.g. language-python), it's a code block inside <pre>
+        if (className) {
+            return <code className={`${className} text-neutral-100`} {...props}>{children}</code>;
         }
-        return <code {...props} />;
+        // Inline code
+        return (
+            <code className="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-sm font-mono text-neutral-800 dark:text-neutral-200" {...props}>{children}</code>
+        );
     },
     pre: (props) => (
-        <pre className="mb-6 rounded-lg overflow-x-auto bg-neutral-950 dark:bg-neutral-900 p-4 text-sm leading-6 border border-neutral-200 dark:border-neutral-800" {...props} />
+        <pre className="mb-6 rounded-lg overflow-x-auto bg-neutral-900 p-4 text-sm leading-6 text-neutral-100 border border-neutral-200 dark:border-neutral-800" {...props} />
     ),
     table: (props) => (
         <div className="overflow-x-auto mb-6">
