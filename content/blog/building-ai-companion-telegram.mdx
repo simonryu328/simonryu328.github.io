@@ -23,38 +23,26 @@ I'll walk through the systems engineering decisions that made it work: how to co
 Before diving in, here's the high-level architecture:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Railway (Cloud)                         │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                    FastAPI Server                         │  │
-│  │                                                           │  │
-│  │  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │  │
-│  │  │  Webhook     │  │  REST API     │  │  Static Files  │  │  │
-│  │  │  /webhook/   │  │  /api/...     │  │  Mini App UI   │  │  │
-│  │  └──────┬──────┘  └──────┬───────┘  └────────────────┘  │  │
-│  │         │                │                                │  │
-│  │  ┌──────▼────────────────▼───────┐                       │  │
-│  │  │       AgentOrchestrator       │                       │  │
-│  │  │   (routes messages + context) │                       │  │
-│  │  └──────────────┬────────────────┘                       │  │
-│  │                 │                                         │  │
-│  │  ┌──────────────▼────────────────┐                       │  │
-│  │  │          SoulAgent            │                       │  │
-│  │  │  (LLM calls, memory, parsing) │                       │  │
-│  │  └──────────────┬────────────────┘                       │  │
-│  │                 │                                         │  │
-│  │  ┌──────────────▼────────────────┐   ┌────────────────┐  │  │
-│  │  │    AsyncMemoryManager         │   │   LLM Client   │  │  │
-│  │  │  (PostgreSQL via SQLAlchemy)  │   │   (LiteLLM)    │  │  │
-│  │  └───────────────────────────────┘   └────────────────┘  │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │  PostgreSQL   │  │  APScheduler │  │  Streamlit Dashboard │  │
-│  │  (Neon)       │  │  (cron jobs) │  │  (monitoring)        │  │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+Railway (Cloud)
+├── FastAPI Server
+│   ├── Webhook (/webhook/)
+│   ├── REST API (/api/...)
+│   ├── Static Files (Mini App UI)
+│   │
+│   ├── AgentOrchestrator
+│   │   └── routes messages + context
+│   │
+│   ├── SoulAgent
+│   │   └── LLM calls, memory, parsing
+│   │
+│   ├── AsyncMemoryManager
+│   │   └── PostgreSQL via SQLAlchemy
+│   │
+│   └── LLM Client (LiteLLM)
+│
+├── PostgreSQL (Neon)
+├── APScheduler (cron jobs)
+└── Streamlit Dashboard (monitoring)
 ```
 
 **Key technology choices:**
@@ -257,29 +245,22 @@ Users can configure reach-out behavior per-user: enable/disable, set minimum sil
 The biggest limitation of most AI chatbots is amnesia. Every conversation starts from zero. Aki solves this with a **tiered memory architecture**:
 
 ```
-                     ┌─────────────────────────────┐
-                     │     System Prompt Context    │
-                     │  (what the LLM actually sees)│
-                     └──────────────┬──────────────┘
-                                    │
-                    ┌───────────────┼───────────────┐
-                    ▼               ▼               ▼
-          ┌─────────────┐  ┌──────────────┐  ┌──────────────┐
-          │  RECENT      │  │  CONVERSATION │  │  CURRENT     │
-          │  EXCHANGES   │  │  MEMORIES     │  │  CONVERSATION│
-          │  (4 entries) │  │  (diary)      │  │  (20 msgs)   │
-          └──────┬──────┘  └──────┬───────┘  └──────┬───────┘
-                 │                │                  │
-          Memory entries    Personal diary      Raw messages
-          with emotional    entries triggered    from the DB
-          context           by milestones        (most recent)
-                 │                │                  │
-                 └────────────────┼──────────────────┘
-                                  │
-                     ┌────────────▼────────────┐
-                     │   Raw Conversation DB    │
-                     │  (all messages, forever) │
-                     └─────────────────────────┘
+System Prompt Context
+(what the LLM actually sees)
+│
+├── Recent Exchanges (4 entries)
+│   └── Memory entries with emotional context
+│
+├── Conversation Memories (diary)
+│   └── Personal diary entries, triggered by milestones
+│
+└── Current Conversation (20 msgs)
+    └── Raw messages from the DB (most recent)
+
+        ▼
+
+Raw Conversation DB
+(all messages, forever)
 ```
 
 ### Layer 1: Raw Conversations
