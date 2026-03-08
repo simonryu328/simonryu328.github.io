@@ -1,25 +1,25 @@
 ---
-title: "Part 2: Conversational AI Agent Techniques"
+title: "Part 2: Aki - Conversational AI Agent Techniques"
 date: 2026-03-08
 categories: [AI, Software Engineering]
 tags: [LLM, Python, Claude, Prompt Engineering, Memory, Architecture]
 ---
 
-Building a conversational AI agent isn't hard. Building one that actually works — that remembers who you are, costs a reasonable amount to run, and doesn't feel like talking to a form — is a different problem. This is a breakdown of the techniques behind Aki, the AI companion I built on Telegram. The patterns here apply broadly to any production-grade conversational agent.
+Building a conversational AI agent isn't hard. Building one that actually works, that remembers who you are, costs a reasonable amount to run, and doesn't feel like talking to a form, is a different problem. This is a breakdown of the techniques behind Aki, the AI companion I built on Telegram. I found these patterns were what I needed to make something I'd actually want to talk to every day.
 
-> The source code is on GitHub, found [here](https://github.com/simonryu328/aki). The first part of this series covering the Telegram infrastructure is [here](/blog/building-ai-companion-telegram).
+> The source code is on GitHub, found [here](https://github.com/simonryu328/aki). The project landing page is at [aki-landing.vercel.app](https://aki-landing.vercel.app/). The first part of this series covering the Telegram infrastructure is [here](/blog/building-ai-companion-telegram).
 
 ---
 
 ## The Core Problems
 
-Before any implementation detail, the problems worth solving:
+Before I got into the implementation details, I had to figure out which problems were actually worth solving. I realized that a good companion needs to handle a few specific things:
 
-- **Memory**: LLMs are stateless. Every call is a blank slate. You have to reconstruct context manually.
-- **Continuity**: Relationships deepen over time. You need both short-term (recent conversation) and long-term (who this person is) memory.
-- **Context limits**: LLM context windows are finite and expensive. You can't dump the entire conversation history on every call.
-- **Personality**: Raw LLM output sounds like an AI. Good persona engineering makes it feel human.
-- **Proactivity**: Real companions reach out. You need a scheduler-driven mechanism to initiate contact.
+- **Memory**: LLMs are stateless. Every call is a blank slate. I had to find a way to reconstruct context manually.
+- **Continuity**: Relationships deepen over time. I needed a way to bridge short-term exchanges with a long-term sense of who the person is.
+- **Context limits**: LLM context windows are finite and expensive. I couldn't just dump the entire conversation history on every call.
+- **Personality**: Raw LLM output often sounds like an AI. I needed persona engineering to make it feel human.
+- **Proactivity**: Real companions reach out first. I built a scheduler-driven mechanism to initiate contact.
 
 ---
 
@@ -27,7 +27,7 @@ Before any implementation detail, the problems worth solving:
 
 ### Multi-Provider Abstraction via LiteLLM
 
-Instead of coupling directly to OpenAI or Anthropic SDKs, I use LiteLLM as a universal adapter:
+I didn't want to couple my code directly to OpenAI or Anthropic SDKs. I use LiteLLM as a universal adapter. It lets me treat different providers the same way:
 
 ```python
 # utils/llm_client.py
@@ -39,11 +39,11 @@ response = await litellm.acompletion(
 )
 ```
 
-You can swap models without touching agent code. Switch from Claude to GPT in one config line. Model pricing, capabilities, and rate limits change constantly — this flexibility matters more than it sounds.
+This gave me the flexibility to swap models without touching the core agent logic. When model pricing or capabilities change, I can just update a config line. This flexibility saved me a lot of time as I experimented with different setups.
 
 ### Retry Logic with Exponential Backoff
 
-LLM APIs fail. Network errors, rate limits, overload. Production agents need to handle this:
+LLM APIs fail sometimes. Whether it's network errors, rate limits, or a provider being overloaded, I needed a way to handle it gracefully. I used the `tenacity` library to handle retries:
 
 ```python
 @retry(
@@ -55,13 +55,11 @@ async def chat(self, model, messages, ...):
     ...
 ```
 
-`tenacity` gives you declarative retry policies. `wait_exponential` means: wait 2s, then 4s, then 8s — giving the API time to recover without hammering it.
+The exponential backoff means that if the first retry fails, the next one waits a bit longer. This gives the API time to recover without hammering it with requests.
 
 ### Tracking Usage
 
-The client exposes two methods:
-- `chat(...)` → returns just the string content (for background tasks)
-- `chat_with_usage(...)` → returns an `LLMResponse` with token counts (for budgeted calls)
+I built two methods into my client. One just returns the string content, which is fine for background tasks. The other, `chat_with_usage`, returns an `LLMResponse` that include token counts:
 
 ```python
 @dataclass
@@ -75,18 +73,20 @@ class LLMResponse:
     cache_creation_tokens: int  # Prompt caching writes (Anthropic)
 ```
 
-You need token counts for per-user daily budgets, cost analytics, and understanding which call types are expensive.
+I found I needed these counts for per-user daily budgets and to understand which parts of my logic were eating up the most tokens.
 
 ### Dedicated Models Per Task
 
+I realized pretty quickly that I didn't need the most expensive model for every single task. I split my usage across different models:
+
 ```python
-MODEL_CONVERSATION:  "claude-haiku-4-5-20251001"   # Fast, cheap — runs every message
-MODEL_MEMORY:        "claude-haiku-4-5-20251001"   # Background task, no latency pressure
-MODEL_INSIGHTS:      "claude-sonnet-4-5-20250929"  # Expensive but rare (weekly feature)
-MODEL_DAILY_MESSAGE: "claude-haiku-4-5-20251001"   # Simple generation, Haiku sufficient
+MODEL_CONVERSATION:  "claude-haiku-4-5-20251001"   # Fast, cheap. This runs for every message.
+MODEL_MEMORY:        "claude-haiku-4-5-20251001"   # Background task. Latency doesn't matter here.
+MODEL_INSIGHTS:      "claude-sonnet-4-5-20250929"  # Expensive but rare. used for weekly features.
+MODEL_DAILY_MESSAGE: "claude-haiku-4-5-20251001"   # Simple generation. Haiku is more than enough.
 ```
 
-Use the cheapest model that meets quality requirements. Reserve expensive models for high-value, low-frequency tasks.
+My rule was simple: use the cheapest model that meets the quality requirement. I reserved the heavy models for high-value, low-frequency tasks.
 
 ---
 
@@ -94,7 +94,7 @@ Use the cheapest model that meets quality requirements. Reserve expensive models
 
 ### The System Prompt Architecture
 
-Aki's system prompt is split into three layers with different volatility:
+I split Aki's system prompt into three layers based on how often they change. This setup helped me optimize for caching:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -102,19 +102,19 @@ Aki's system prompt is split into three layers with different volatility:
 │  - Aki's identity ("You are Aki...")    │
 │  - Persona definition                   │
 │  - Output format specification          │
-│  → Cache this! It never changes.        │
+│  → This stays in the cache.             │
 └─────────────────────────────────────────┘
 ┌─────────────────────────────────────────┐
 │  LAYER 2: SEMI-STATIC (changes slowly)  │
 │  - Recent memory entries                │
 │  - Compact summaries of past exchanges  │
-│  → Cache this! Stable for many messages │
+│  → Stable for many messages.            │
 └─────────────────────────────────────────┘
 ┌─────────────────────────────────────────┐
 │  LAYER 3: VOLATILE (changes every msg)  │
 │  - Current conversation (last 20 msgs)  │
-│  - Current time / time-of-day context   │
-│  → Never cache — changes constantly     │
+│  - Current time context                 │
+│  → Changes constantly.                  │
 └─────────────────────────────────────────┘
 ```
 
@@ -126,18 +126,18 @@ system_prompt_blocks = [
 ]
 ```
 
-Anthropic's prompt caching reuses cached tokens at ~10% of the cost. By keeping volatile content at the end (after cached blocks), cache hits are maximized.
+Anthropic's prompt caching cut my costs significantly. By keeping the volatile content at the end of the prompt, I could reuse the cached tokens from the first two layers for most of my calls.
 
 ### Structured Output via XML
 
-Rather than asking the LLM to "respond naturally", I enforce a strict XML schema:
+I tried asking the LLM to just "respond naturally" but it was too hit-or-miss. Now I enforce a strict XML schema. XML is great because it's more forgiving than JSON. If a closing tag is missing, I can usually still parse it.
 
 ```xml
 <?xml version="1.0"?>
 <message>
   <thinking>
-    Internal reasoning — never shown to user.
-    Gut check: What's happening? React or ask?
+    Internal reasoning. Never shown to user.
+    What's happening? React or ask?
   </thinking>
   <emoji>❤️</emoji>
   <response>
@@ -146,270 +146,111 @@ Rather than asking the LLM to "respond naturally", I enforce a strict XML schema
 </message>
 ```
 
-XML over JSON: XML is more forgiving of imperfect generation. A missing closing tag is recoverable; malformed JSON breaks parsers. The `<thinking>` block also gives the LLM space to reason before committing to a response — similar to chain-of-thought prompting.
-
 ### The Thinking Layer
 
-The `<thinking>` block is never shown to the user. But it qualitatively improves response quality:
-
-1. The LLM warms up its reasoning before outputting the visible message
-2. Complex situations get a moment of internal processing
-3. You can log it for debugging — invaluable for understanding why the agent said something
-
-```python
-# soul_agent.py — stored for debug inspection
-SoulAgent._last_thinking[user_id] = thinking or "(no thinking captured)"
-```
+The `<thinking>` block is something I added after realizing that the LLM needed a "warm up" period before outputting the visible message. It qualitatively improved the response quality because it gave the model space to reason through complex situations before committing to a visible answer. I also log these blocks, which has been invaluable for debugging why Aki said what she said.
 
 ### `[BREAK]` Multi-Message Splitting
 
-Real texting doesn't come in one block. Aki sends multiple short messages:
-
-```
-YESS[BREAK]wait that's actually wild[BREAK]okay tell me everything
-```
-
-The prompt instructs this. The parser splits on `[BREAK]` and sends each chunk with a typing delay:
-
-```python
-if '[BREAK]' in response_content:
-    messages = [msg.strip() for msg in response_content.split('[BREAK]') if msg.strip()]
-```
-
-Three short rapid-fire messages feel like a real person texting. One long paragraph doesn't.
+Real texting doesn't usually happen in one big block. It's often multiple short messages. I instructed the model to use `[BREAK]` markers to indicate where a split should happen. My parser then splits the response and sends each chunk with a small typing delay. Three short messages feel a lot more personal than one long paragraph.
 
 ### Time Context Injection
 
-Every message includes the user's local time of day:
-
-```python
-user_tz_str = await self._get_user_tz(user_id, user)
-now = datetime.now(pytz.timezone(user_tz_str))
-current_time = now.strftime("%A, %B %d at %I:%M %p")
-
-if 5 <= hour < 12:    time_context = "It's morning."
-elif 12 <= hour < 17: time_context = "It's afternoon."
-elif 17 <= hour < 21: time_context = "It's evening."
-else:                  time_context = "It's late night."
-```
-
-"It's 2am" and "it's 10am" should produce very different responses to "I can't sleep". Store the user's IANA timezone and convert all timestamps to local time.
+Every message I send to the model includes the user's local time of day. "It's 2am" and "It's 10am" usually mean different things for context. I store the user's IANA timezone and convert all timestamps to their local time before generating context.
 
 ---
 
 ## Memory Architecture
 
-### The Core Problem
+### The Problem with Statelessness
 
-An LLM has no persistent state. Between conversations, it remembers nothing. Every response is generated from scratch. Your database IS the LLM's long-term memory.
+Since LLMs have no persistent state, they don't remember anything between conversations. I had to build that "mind" in my database.
 
 ### Two Memory Systems
 
-Aki uses a dual-store approach:
+I use a dual-store approach to handle different types of queries:
 
-| System | Technology | Role |
+| System | Technology | My Goal |
 |--------|-----------|------|
-| **Structured Store** | PostgreSQL + SQLAlchemy | Conversation history, diary entries, user profiles |
-| **Semantic Store** | Pinecone (Vector DB) | Semantic similarity search over memories |
-
-When to use each:
-- Structured: "Give me the last 20 messages" / "Give me memories from last week"
-- Semantic: "What did this person say about their relationship with their mother?" (when you don't know when it was said)
+| **Structured Store** | PostgreSQL + SQLAlchemy | Give me the last 20 messages. |
+| **Semantic Store** | Pinecone (Vector DB) | What did they say about their sister? |
 
 ### The Data Model
+
+I structured the database to follow how I thought a person might remember things:
 
 ```
 User
 ├── id, telegram_id, name, timezone
-├── reach_out settings (enabled, min_silence_hours)
+├── reach_out settings
 └── spotify tokens
 
-Conversation  (raw message log)
-├── user_id, role (user|assistant), message
-├── thinking (LLM's internal reasoning — never shown)
+Conversation (the raw log)
+├── user_id, role, message
+├── thinking (LLM internal reasoning)
 └── timestamp
 
-DiaryEntry  (processed memories and summaries)
-├── entry_type: compact_summary | conversation_memory | personalized_insights
-├── title, content, importance (0-10)
-├── exchange_start, exchange_end  ← key for deduplication
+DiaryEntry (the processed mind)
+├── entry_type: summary, memory, or insight
+├── content, importance
+├── exchange_start, exchange_end
 └── timestamp
 
-FutureEntry  (plans and notes the user creates)
-├── entry_type: plan | note
-├── title, content, start_time
-└── is_completed, source (manual|bot|google)
+FutureEntry (plans and notes)
+├── entry_type: plan or note
+├── content, start_time
+└── is_completed
 
-TokenUsage  (cost tracking)
+TokenUsage (the money tracker)
 ├── user_id, model, call_type
-├── input_tokens, output_tokens, cache_read_tokens
+├── input_tokens, output_tokens
 └── timestamp
 ```
 
 ### Two Memory Entry Types
 
-**`compact_summary`**: A factual, timestamped record of what happened in a conversation window.
-> "On March 5 from 9pm-11pm, Simon and Aki talked about his job interview at Shopify. He felt nervous but confident. He planned to prepare by reviewing system design..."
+I found that I needed to differentiate between *events* and *traits*.
 
-**`conversation_memory`**: A reflective, character-focused memory about who the person is.
-> "Simon's fear of underperforming shows up most clearly before high-stakes events. He tends to mask anxiety with humor. This interview matters more than he's letting on..."
+**`compact_summary`** records what happened. For example: "On March 5, they talked about their job interview. They felt nervous but confident."
 
-Compact summaries remember *events*. Memory entries remember *the person*.
+**`conversation_memory`** records who the person is. For example: "They tend to mask anxiety with humor. This interview matters to them more than they let on."
+
+By keeping both, Aki can remember that an event happened while also understanding the emotional weight behind it.
 
 ---
 
 ## Context Window Management
 
-### The Core Challenge
+### Picking the Right Context
 
-You have:
-- 100,000+ tokens of available context (Claude)
-- 20,000 messages in the database
-- A ~2,000 token budget for context to keep costs reasonable
-
-You need to pick the right messages to include.
+I have access to over 100,000 tokens of context with Claude, but I wanted to keep my budget around 2,000 tokens per call to keep costs reasonable. I couldn't just dump everything in. I had to be selective.
 
 ### Four-Layer Context Assembly
 
-```python
-async def _build_conversation_context(self, user_id, conversation_history, user):
-    diary_entries = await self.memory.get_diary_entries(user_id, limit=20)
-    
-    all_memories  = [e for e in diary_entries if e.entry_type == 'conversation_memory']
-    all_summaries = [e for e in diary_entries if e.entry_type == 'compact_summary']
-    
-    # Last 2 compact summaries (recent conversation overviews)
-    summary_entries = all_summaries[:2]
-    
-    # Last 2 memory entries OLDER than the summaries
-    # (avoid duplicating what the summaries already cover)
-    cutoff = oldest_summary.exchange_start
-    memory_entries = [m for m in all_memories if m.exchange_end <= cutoff][:2]
-    
-    # Prompt order: oldest memory → newer memory → older summary → newest summary
-    # (chronological for the LLM — most recent context appears last)
-    context_items = list(reversed(memory_entries)) + list(reversed(summary_entries))
-```
+My approach was to layer the context like this:
 
-Result: the LLM gets what kind of person this is (memory entries, from months ago), what they've talked about recently (compact summaries), and the raw conversation right now (last 20 messages).
+1.  **Oldest Memory Entries**: Facts about the person from weeks or months ago.
+2.  **Recent Memory Entries**: More recent traits.
+3.  **Recent Summaries**: What we've been talking about lately.
+4.  **Raw History**: The last 20 messages for immediate context.
 
-### Preventing Context Duplication
+This gives the model a sense of who the person is (long-term) and what's happening right now (short-term) without overwhelming it.
 
-A naive approach sends both raw messages AND summaries covering those same messages. That wastes tokens and can confuse the LLM. The fix: trim raw messages that are already covered by a summary, keeping a small overlap:
+### Preventing Duplication
 
-```python
-if summary_entries:
-    latest_summary = summary_entries[0]
-    summary_end = latest_summary.exchange_end
-    
-    after_summary = []  # Messages that came AFTER the summary's coverage
-    overlap = []        # 3 messages of "glue" for conversational continuity
-    
-    for conv in reversed(conversation_history):
-        if conv_ts > summary_end:
-            after_summary.append(conv)
-        elif len(overlap) < 3:
-            overlap.append(conv)   # Small overlap to avoid abrupt cutoffs
-        else:
-            break
-    
-    current_convos = list(reversed(after_summary + overlap))
-```
-
-### Timestamp Formatting
-
-All context is formatted with local timestamps:
-
-```
-[Feb 20, 9:30 PM - 11:45 PM] Simon talked about his anxiety before the Google interview...
-[Feb 28, 2:15 PM - 3:45 PM] Simon got the offer. He was ecstatic but immediately started worrying about his start date...
-[Mar 5, 8:00 PM] Simon: hey so i started the new job today
-[Mar 5, 8:01 PM] Aki: WAIT you started?? how was it??
-```
-
-This gives the LLM a sense of how long ago things happened — critical for responses like "are you still nervous about that?"
+I had an issue early on where my context included both the raw messages and a summary that covered those same messages. It was a waste of tokens. I added logic to trim the raw messages so they only overlap slightly with the latest summary. This "glue" overlap keeps the conversation flowing without wasting space.
 
 ---
 
 ## Compact Summarization
 
-### Why It's Necessary
+### Compressing History
 
-Raw conversation history grows unboundedly. After 500 messages (a few weeks for an active user), you'd need thousands of tokens just to give the LLM any historical context.
+As the conversation history grows, I need to compress it. I set up a background task that triggers every 30 messages. It takes the latest batch of raw messages and compresses them into a `compact_summary` and a `conversation_memory`.
 
-Solution: periodically compress batches of raw messages into dense summaries. Keep summaries; eventually archive the raw messages.
-
-### Trigger Logic
-
-```python
-async def _maybe_create_compact_summary(self, user_id, conversation_history):
-    threshold = max(settings.COMPACT_INTERVAL, settings.MEMORY_ENTRY_INTERVAL)  # Default: 30 messages
-    
-    if last_compact:
-        all_convos = await self.memory.db.get_conversations_after(user_id, last_compact, limit=100)
-    else:
-        all_convos = await self.memory.db.get_recent_conversations(user_id, limit=100)
-    
-    if len(all_convos) >= settings.COMPACT_INTERVAL:
-        await asyncio.gather(
-            self._create_compact_summary(user_id, all_convos),
-            self._create_memory_entry(user_id, all_convos),
-        )
-```
-
-Key decisions:
-1. **Database-based trigger**: Survives restarts. If the bot crashes at 29 messages, the count isn't lost.
-2. **Runs as a background task**: `asyncio.create_task(...)` — the user gets their response immediately, summarization happens in parallel.
-3. **Both triggered together**: Every N messages, you write a factual summary AND a reflective memory entry.
-
-### The Two Prompts
-
-**Compact Summary prompt** — factual, third-person:
-> "Create a detailed factual record... Include emotional states, concerns, plans, decisions... Include specific details: names, places, times, dates, amounts..."
-
-**Memory Entry prompt** — reflective, character-focused:
-> "Write how Aki should remember this conversation... Focus on who they are, what matters to them... Capture the emotional texture... Write warmly and personally, as if remembering someone you care about."
-
----
-
-## Response Parsing
-
-### Robust Multi-Format Parser
-
-LLMs don't always output perfect XML. The parser handles multiple fallback formats:
-
-```python
-def _parse_response(self, raw: str):
-    # Format 1: Perfect XML (<?xml ...><message>...</message>)
-    xml_match = re.search(r'<\?xml version="1\.0"\?>\s*<message>(.*?)</message>', raw, re.DOTALL)
-    if xml_match:
-        # Extract <thinking>, <emoji>, <response> from XML
-        ...
-    else:
-        # Format 2: Legacy loose tags (<thinking>...</thinking>)
-        # Format 3: [BREAK] markers in raw text
-        # Format 4: ||| separator (old format)
-        # Format 5: Plain text fallback
-```
-
-Never let a parser failure cause a silent empty response. Always fall through to a working fallback.
-
-### Auto-Split for Long Messages
-
-If the LLM ignores `[BREAK]` instructions and sends one long block, split it intelligently:
-
-```python
-def _smart_split_message(self, text: str, max_length: int = 250):
-    # First try: split on double line breaks (paragraphs)
-    paragraphs = text.split('\n\n')
-    if len(paragraphs) > 1: ...
-    
-    # Then try: split on sentence boundaries (. ! ?)
-    sentences = re.split(r'([.!?]+\s+)', text)
-    ...
-```
-
-Split on semantic boundaries, not character count. A message cut mid-sentence feels wrong; cutting at a paragraph or sentence boundary feels natural.
+I made a few key decisions here:
+1.  **Database-triggered**: If the bot restarts, it doesn't lose the count.
+2.  **Background tasks**: The user gets their reply immediately. The summarization happens quietly in the background.
 
 ---
 
@@ -417,57 +258,13 @@ Split on semantic boundaries, not character count. A message cut mid-sentence fe
 
 ### The Reach-Out System
 
-A real companion doesn't just wait. Aki proactively messages users after a period of silence.
+A friend doesn't just wait for you to text them. They reach out when they haven't heard from you in a while. I built a system that runs every hour to check for users who have been silent for more than a few hours.
 
-How it works:
-1. A scheduler runs every 60 minutes
-2. It queries users whose last message was > N hours ago (configurable per user)
-3. For eligible users, it generates a personalized reach-out message
-4. The message picks up an *unfinished thread* from recent context
+The prompt I wrote for this is very specific: "You're bored. Something they said is bugging you. Scan for an unfinished thread and ask about it." I wanted to avoid that "checking in like a wellness app" energy. It needs to feel organic, like someone actually remembered a detail from a previous talk.
 
-```python
-# prompts/reach_out.py
-"""
-You're bored. Something they said is bugging you — they never finished the thought.
-Scan RECENT EXCHANGES for UNFINISHED threads:
-- They mentioned someone but never explained the situation
-- They said they did something but didn't say what happened after
-Pick ONE specific thing. Ask about it like you just remembered it lying in bed.
-The message should make them think "oh shit, yeah" — NOT "aki is checking in like a wellness app"
-"""
-```
+### Scheduled Messages
 
-The worst proactive messages feel like customer service: "Hi! Just checking in! 😊". The best ones feel organic — like a friend who remembered something you said. The prompt explicitly forbids "wellness app" energy.
-
-### Scheduled Future Messages
-
-The `FutureEntry` system lets users (and Aki via tools) schedule messages for the future:
-
-```python
-class FutureEntry(Base):
-    entry_type: "plan" | "note"
-    start_time: DateTime    # When to deliver
-    is_completed: bool
-    source: "manual" | "bot" | "google"
-```
-
-Natural language time parsing — when the user says "remind me tomorrow morning":
-
-```python
-def _parse_when_to_datetime(self, when: str):
-    # 1. Try ISO 8601: "2026-03-10T09:00"
-    # 2. Try dateparser: "tomorrow at 9am", "in 3 hours", "next Monday"
-    # 3. Try legacy keywords: "tomorrow_morning", "in_24h"
-    # 4. Default: 24 hours from now
-    
-    parsed = dateparser.parse(when, settings={
-        'TIMEZONE': settings.TIMEZONE,
-        'RETURN_AS_TIMEZONE_AWARE': True,
-        'PREFER_DATES_FROM': 'future',
-    })
-```
-
-`dateparser` handles "next Friday at 3pm" and "in two weeks" without you writing your own NLP date parser.
+I also added a `FutureEntry` system. If a user says "remind me to check my mail in 3 hours," Aki can use a tool to schedule that message. I used `dateparser` to handle natural language time parsing, so I don't have to worry about writing my own NLP date utility.
 
 ---
 
@@ -475,307 +272,43 @@ def _parse_when_to_datetime(self, when: str):
 
 ### Separating Frame from Personality
 
-The system prompt has two distinct parts:
+I kept the structural scaffold (how Aki understands herself and the format) separate from the persona (her personality definition). This means I could theoretically switch Aki's personality just by swapping one file, without touching any of the core logic.
 
-- **System Frame** (`system_frame.py`): The structural scaffold — how Aki understands herself, the output format, the context blocks. This doesn't change.
-- **Persona** (`personas/aki_persona.py`): The personality definition. Swappable.
+### Making the Persona Feel Real
 
-```python
-class SoulAgent:
-    def __init__(self, model=settings.MODEL_CONVERSATION, persona=COMPANION_PERSONA):
-        self.persona = persona  # Inject any persona at init time
-```
-
-To create a "therapist mode" or "study buddy mode" — write a new persona file and pass it in. Zero changes to anything else.
-
-### What Makes a Persona Work
-
-```
-MIRROR WITH GAIN:
-Match their energy, then amp it up.
-Always slightly brighter, more optimistic than their baseline.
-
-REACT, DON'T INTERVIEW:
-Most responses should be reactions, not questions.
-Good: "YESS" "wait that's huge" "okay go off" "lmao"
-Bad: "How does that make you feel?" "Can you elaborate?"
-
-TEXT LIKE A HUMAN:
-Short messages. Emojis when natural.
-If it sounds like an AI wrote it, you failed.
-
-MOST MESSAGES ARE JUST MESSAGES:
-Lunch is lunch. Gym is gym. Not everything is deep.
-React naturally.
-```
-
-Persona prompts work best with concrete examples of right and wrong behavior. Abstract instructions ("be casual") get ignored. Specific positive and negative examples shape output reliably.
+I found that abstract instructions like "be casual" didn't work well. I had better results with concrete principles:
+- **Mirror with gain**: Match their energy, but stay slightly more optimistic.
+- **React, don't interview**: Don't just ask questions. React to what they say. LMAO or "wait that's huge" goes a long way.
+- **Text like a human**: Use short messages and emojis where they fit.
 
 ---
 
 ## Async Architecture
 
-### Why Async Matters
+### Why I Used Async
 
-Every message triggers multiple I/O operations:
-- Database read (fetch history, user profile)
-- LLM API call (main response)
-- Database write (store conversation)
-- Background LLM calls (compact summary, memory entry)
-
-With synchronous code, these are sequential. With async, they overlap:
-
-```python
-# Parallel fetches at startup
-user_info, conversations, diary_entries = await asyncio.gather(
-    self.db.get_user_by_id(user_id),
-    self.db.get_recent_conversations(user_id, limit=20),
-    self.db.get_diary_entries(user_id, limit=20),
-)
-
-# Background tasks that don't block the response
-asyncio.create_task(
-    self._maybe_create_compact_summary(user_id, conversation_history)
-)
-```
-
-Anything that doesn't affect the current response should be a background task. The user shouldn't wait for memory consolidation — that happens while they're reading the reply.
-
-### Async SQLAlchemy
-
-```python
-# memory/database_async.py
-async with self.session_factory() as session:
-    result = await session.execute(
-        select(Conversation)
-        .where(Conversation.user_id == user_id)
-        .order_by(desc(Conversation.timestamp))
-        .limit(limit)
-    )
-    return result.scalars().all()
-```
-
-This allows many concurrent users without thread contention. Every operation is scoped to a `user_id` — no shared state between users.
+Every message involves multiple database and API operations. If I ran them sequentially, the latency would be terrible. I used Python's `asyncio` to let these operations overlap. Anything that doesn't need to be finished before the reply is sent, like summarization or token tracking, is pushed into a background task.
 
 ---
 
-## Cost & Rate Control
+## Cost and Rate Control
 
-### Per-User Rate Limiting
+### Budgets and Limits
 
-```python
-class RateLimiter:
-    def __init__(self, max_messages: int, window_seconds: int):
-        self._timestamps: Dict[int, deque] = {}  # Per-user timestamp queues
-    
-    def check_rate_limit(self, user_id: int) -> tuple[bool, int]:
-        now = datetime.now().timestamp()
-        cutoff = now - self.window_seconds
-        
-        timestamps = self._timestamps[user_id]
-        
-        while timestamps and timestamps[0] < cutoff:
-            timestamps.popleft()
-        
-        if len(timestamps) >= self.max_messages:
-            return False, 0
-        
-        timestamps.append(now)
-        return True, remaining
-```
+To prevent any run-away costs, I built in a per-user daily token budget. If a user hits their limit, Aki will gracefully say something like "I've got a lot to think about today, let's pick this up tomorrow." It feels like part of her character rather than a system error.
 
-For small-to-medium scale, an in-memory deque per user is sufficient. Redis is only worth the operational complexity at tens of thousands of concurrent users.
-
-### Per-User Daily Token Budget
-
-```python
-if settings.USER_DAILY_TOKEN_BUDGET > 0:
-    usage_today = await self.memory.db.get_user_token_usage_today(user_id)
-    if usage_today >= settings.USER_DAILY_TOKEN_BUDGET:
-        return ["You've given me so much to think about today! 🧠✨ Let's pause here..."], "😴"
-```
-
-The budget message is written as Aki, not as a system error. Fail gracefully and in-persona.
-
-### Token Tracking Per Call Type
-
-```python
-await self.memory.record_token_usage(
-    user_id=user_id,
-    model=result.usage.model,
-    input_tokens=...,
-    output_tokens=...,
-    call_type="conversation",  # or "compact", "memory", "reach_out"
-)
-```
-
-Tracking by `call_type` lets you answer: which features are costing the most? You may find that daily reach-out messages use 3x the tokens of regular conversation — and tune accordingly.
-
----
-
-## Prompt Caching
-
-### What It Is
-
-Anthropic's prompt caching lets you mark parts of the system prompt as cacheable. If the same prefix is reused across multiple calls, you pay only ~10% of the normal input token cost for cached tokens.
-
-### Implementation
-
-```python
-system_prompt_blocks = [
-    {
-        "type": "text",
-        "text": static_text,            # Persona + Format (never changes)
-        "cache_control": {"type": "ephemeral"}
-    },
-    {
-        "type": "text",
-        "text": exchanges_block,        # Memory summaries (stable for many messages)
-        "cache_control": {"type": "ephemeral"}
-    },
-    {
-        "type": "text",
-        "text": volatile_block           # Current conversation + time (changes every call)
-        # No cache_control here
-    },
-]
-```
-
-LiteLLM automatically adds the required `anthropic-beta: prompt-caching-2024-07-31` header when cache_control blocks are detected.
-
-### Monitoring Cache Hits
-
-```python
-if llm_response.cache_read_tokens > 0:
-    logger.info(f"⚡ CACHE HIT: {llm_response.cache_read_tokens} tokens saved")
-elif llm_response.cache_creation_tokens > 0:
-    logger.info(f"🆕 CACHE CREATED: {llm_response.cache_creation_tokens} tokens")
-```
-
-Monitor this in production. Cache hit rate tells you how stable your prompt structure is and how much you're saving.
+I also track usage per call type. This helped me see that my proactive messages were actually quite cheap compared to the main conversation, which gave me more confidence in letting them run.
 
 ---
 
 ## Message Debouncing
 
-### The Problem
+### The "Hey" Problem
 
-Real users send multiple short messages in rapid succession:
-```
-User: hey
-User: i need to tell you something
-User: it's about my sister
-```
-
-If each triggers a separate LLM call, the agent responds to "hey" before seeing the full context. The result is fragmented and incoherent.
-
-### The Debounce Pattern
-
-```python
-async def handle_text_message(self, update, context):
-    self._message_buffers[chat_id].append(message_text)
-    
-    if chat_id in self._debounce_tasks:
-        self._debounce_tasks[chat_id].cancel()
-    
-    self._debounce_tasks[chat_id] = asyncio.create_task(
-        self._process_buffered_messages(chat_id)
-    )
-
-async def _process_buffered_messages(self, chat_id):
-    await asyncio.sleep(settings.DEBOUNCE_SECONDS)  # Default: 0.5s
-    
-    buffered = self._message_buffers.pop(chat_id, [])
-    combined = "\n".join(buffered)  # All messages merged into one
-    
-    messages, emoji = await orchestrator.process_message(combined)
-```
-
-0.5s is a good default. Fast typists feel immediate; the window is long enough to catch multi-message thoughts. Increase to 1-2s if users tend to send long chains.
+A lot of people text in fragments: "hey", then "i have a question", then the actual question. If I replied to every individual message, it would be a mess. I built a 0.5s debounce timer. It waits for a moment of silence before combining all those fragments into one single thought. It makes the interaction feel much more natural.
 
 ---
 
-## The Full Request Lifecycle
+## Final Thoughts
 
-Every step when a user sends a message:
-
-```
-User types "i think i'm going to quit my job"
-         │
-         ▼
-[Telegram → TelegramBot.handle_text_message]
-  • Add to message buffer
-  • Start/reset 0.5s debounce timer
-         │
-         ▼  (after 0.5s silence)
-[_process_buffered_messages]
-  • Check rate limit (sliding window, in-memory)
-  • Combine buffered messages
-         │
-         ▼
-[AgentOrchestrator.process_message]
-  • get_or_create_user (Postgres)
-  • store user message to DB
-  • fetch last 20 conversations from DB
-  • check daily token budget
-         │
-         ▼
-[SoulAgent.respond]
-  • _build_conversation_context():
-      - fetch diary entries (up to 20)
-      - select 2 compact summaries + 2 memory entries
-      - trim raw history to exclude already-summarized messages
-      - format all with local timestamps
-  • Build system prompt (3 cached blocks)
-  • Get user's local time + time-of-day label
-  • Call llm_client.chat_with_system_and_usage()
-      [Anthropic Claude API]
-      → returns XML response + token usage
-  • _parse_response():
-      - extract <thinking> (stored for debug)
-      - extract <emoji>
-      - extract <response>, split on [BREAK]
-      - auto-split if single message is too long
-  • asyncio.create_task(_maybe_create_compact_summary)  ← background
-         │
-         ▼
-[Back in orchestrator]
-  • store assistant response to DB (with thinking)
-  • record token usage to DB (background)
-         │
-         ▼
-[Back in TelegramBot]
-  • Send emoji reaction (if counter triggers)
-  • Send sticker (if counter triggers, emoji has mapping)
-  • For each message: send_with_typing()
-      - show typing indicator scaled to message length
-      - send message
-         │
-         ▼
-User sees: reaction emoji + optional sticker + 1-3 short, casual messages
-
-Meanwhile, in background:
-  • _maybe_create_compact_summary checks: ≥30 messages since last compact?
-  • If yes: generate compact_summary + conversation_memory via LLM
-  • Store both as DiaryEntry with exchange timestamps
-```
-
----
-
-## Key Design Principles
-
-1. **Stateless LLM, stateful database**: The LLM knows nothing. The database is the mind.
-
-2. **Context is curated, not dumped**: Don't send everything. Send the right things — recent raw conversation + processed long-term memory.
-
-3. **Background work is invisible**: Summarization, memory creation, token tracking — none of this should add latency.
-
-4. **Fail gracefully and in-persona**: Rate limits, token budgets, and errors should respond as Aki, not as system errors.
-
-5. **Prompt layers match cache-ability**: Static → Semi-static → Volatile. Match this to cache breakpoints.
-
-6. **Output format enforces structure**: XML schema gives you a reliable parsing target. Thinking blocks improve quality. `[BREAK]` markers enable natural multi-message flow.
-
-7. **Model selection is a cost lever**: Use cheap-fast models for frequent calls; expensive-capable models for rare, high-value features.
-
-8. **Time is first-class**: Store and convert all timestamps to user local time. Include time context in every prompt. Temporal awareness makes the agent feel present.
+The main thing I learned building Aki is that the LLM is just one small part of the system. The real work is in the "human" details—how context is selected, how messages are timed, and how the bot initiates contact. Most of my time was spent in the database and the prompt engineering, not in the model selection.

@@ -1,5 +1,5 @@
 ---
-title: "Part 1: Building a Production AI Companion on Telegram"
+title: "Part 1: Aki - Production Chatbot on Telegram"
 date: 2026-03-04
 categories: [AI, Software Engineering]
 tags: [Telegram, FastAPI, LLM, Python, Claude, LiteLLM, Prompt Engineering]
@@ -8,11 +8,11 @@ image:
   alt: "Telegram chat interface connected to FastAPI, PostgreSQL, and AI infrastructure"
 ---
 
-Most AI chatbot tutorials end at the same place: call the API, return the response. What they skip is everything that makes the difference between a toy and something you'd actually use — message timing, cost management, memory that survives restarts, and making it feel like someone's actually there.
+Most AI chatbot tutorials end at the same place: call the API, return the response. What they skip is everything that makes the difference between a toy and something you'd actually use: message timing, cost management, memory that survives restarts, and making it feel like someone's actually there.
 
-This is Part 1 of a two-part series on **Aki**, a personal AI companion I built on Telegram. The codebase is ~5,000 lines of Python across FastAPI, python-telegram-bot, Claude, PostgreSQL, and LiteLLM. I'll go through the engineering decisions that mattered — co-hosting a webhook and API server, why debouncing is non-negotiable, how memory gets tiered so costs stay manageable, and what I actually learned once real people started using it. (See Part 2 on conversational techniques [here](/blog/conversational-ai-agent-techniques)).
+This is Part 1 of a two-part series on **Aki**, a personal AI companion I built on Telegram. The codebase is ~5,000 lines of Python across FastAPI, python-telegram-bot, Claude, PostgreSQL, and LiteLLM. I'll go through the engineering decisions that mattered: co-hosting a webhook and API server, why debouncing is non-negotiable, how memory gets tiered so costs stay manageable, and what I actually learned once real people started using it. (See Part 2 on conversational techniques [here](/blog/conversational-ai-agent-techniques)).
 
-> The source code is on GitHub, found [here](https://github.com/simonryu328/aki).
+> The source code is on GitHub, found [here](https://github.com/simonryu328/aki). The project landing page is at [aki-landing.vercel.app](https://aki-landing.vercel.app/).
 
 ---
 
