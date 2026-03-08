@@ -8,19 +8,15 @@ image:
   alt: "Telegram chat interface connected to FastAPI, PostgreSQL, and AI infrastructure"
 ---
 
-Most AI chatbot tutorials end at the same place: call the API, return the response. But when you try to ship a real product, you quickly discover that the API call is maybe 10% of the work. The other 90% is everything nobody tells you about — message timing, cost management, memory architecture, and making the whole thing actually feel *alive*.
+Most AI chatbot tutorials end at the same place: call the API, return the response. What they skip is everything that makes the difference between a toy and something you'd actually use — message timing, cost management, memory that survives restarts, and making it feel like someone's actually there.
 
-This post is a deep dive into **Aki**, a personal AI companion I built on Telegram. Not another wrapper around ChatGPT — Aki is an always-on reflection partner with persistent memory, proactive messaging, a Spotify DJ, and a full Mini App dashboard. The codebase spans ~5,000 lines of Python across FastAPI, python-telegram-bot, Claude, PostgreSQL, and LiteLLM.
+This is a writeup on **Aki**, a personal AI companion I built on Telegram. The codebase is ~5,000 lines of Python across FastAPI, python-telegram-bot, Claude, PostgreSQL, and LiteLLM. I'll go through the engineering decisions that mattered — co-hosting a webhook and API server, why debouncing is non-negotiable, how memory gets tiered so costs stay manageable, and what I actually learned once real people started using it.
 
-I'll walk through the systems engineering decisions that made it work: how to co-host a webhook and an API server, why message debouncing is non-negotiable, how to build a tiered memory system that survives restarts, and the cost engineering that kept the bill from spiraling.
-
-> The source code for the project is hosted on GitHub, found [here](https://github.com/simonryu328/aki).
+> The source code is on GitHub, found [here](https://github.com/simonryu328/aki).
 
 ---
 
-## The Stack at a Glance
-
-Before diving in, here's the high-level architecture:
+## Architecture Overview
 
 ```
 Railway (Cloud)
@@ -45,31 +41,21 @@ Railway (Cloud)
 └── Streamlit Dashboard (monitoring)
 ```
 
-**Key technology choices:**
-- **FastAPI** for the async web server (webhook receiver + REST API + static file serving)
-- **python-telegram-bot** for Telegram Bot API integration
-- **Claude (Anthropic)** as the primary LLM via LiteLLM
-- **PostgreSQL** (hosted on Neon) for persistent storage
-- **Pydantic Settings** for type-safe configuration with environment variables
-- **Railway** for deployment
+Stack: FastAPI, python-telegram-bot, Claude via LiteLLM, PostgreSQL on Neon, deployed on Railway.
 
 ---
 
 ## Co-hosting a Webhook and an API
 
-The first design decision was: how do you run a Telegram bot, a REST API, and a frontend all from one process?
+The first design question: how do you run a Telegram bot, a REST API, and a frontend all from one process?
 
-Most Telegram bot tutorials use **polling** — the bot connects to Telegram and continuously asks "any new messages?" This is fine for development, but in production, you want **webhooks**: Telegram pushes messages to your server. This is more efficient and scales better.
+Most Telegram bot tutorials use polling — the bot connects to Telegram and asks "any new messages?" in a loop. Fine for development. In production you want webhooks: Telegram pushes to your server, which is more efficient and scales better.
 
-The trick is that Aki's FastAPI server also needs to serve the Mini App frontend (static HTML/JS/CSS) and expose REST API endpoints for the Mini App to call. The solution: **FastAPI's lifespan pattern** co-starts the Telegram bot alongside the API server:
+Aki's FastAPI server also needs to serve the Mini App frontend (static HTML/JS/CSS) and expose REST endpoints for it to call. The fix: FastAPI's lifespan pattern starts the bot alongside the API server.
 
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifecycle manager for the FastAPI app.
-    Starts and stops the Telegram bot alongside the API.
-    """
     # Startup
     await bot.start()
 
@@ -86,24 +72,20 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AI Companion API", lifespan=lifespan)
 ```
 
-The `WEBHOOK_URL` environment variable acts as a toggle: set it and the bot uses webhooks; leave it empty and it falls back to polling for local development. One codebase, two modes.
+`WEBHOOK_URL` acts as a toggle — set it and the bot uses webhooks; leave it empty and it falls back to polling for local development.
 
-The same server also serves a **unified dashboard endpoint** that the Mini App fetches on load:
+The Mini App loads everything from a single endpoint:
 
 ```python
 @app.get("/api/dashboard/{telegram_id}")
 async def get_dashboard(telegram_id: int):
-    """
-    Fetches everything needed for the Mini App in one round-trip:
-    profile, memories, daily message, soundtrack, insights, plans.
-    """
     user = await memory_manager.get_or_create_user(telegram_id=telegram_id)
 
-    memories  = await memory_manager.get_diary_entries(user.id, limit=50)
-    daily_msg = await _get_daily_message_data(telegram_id, user)
+    memories   = await memory_manager.get_diary_entries(user.id, limit=50)
+    daily_msg  = await _get_daily_message_data(telegram_id, user)
     soundtrack = await _get_daily_soundtrack_data(telegram_id, user)
-    insights  = await _get_personalized_insights_data(telegram_id, user)
-    horizons  = await memory_manager.get_future_entries(user_id=user.id)
+    insights   = await _get_personalized_insights_data(telegram_id, user)
+    horizons   = await memory_manager.get_future_entries(user_id=user.id)
 
     return DashboardResponse(
         profile=UserProfileResponse(...),
@@ -115,13 +97,11 @@ async def get_dashboard(telegram_id: int):
     )
 ```
 
-One request, everything the UI needs. This matters because Telegram Mini Apps run inside an embedded WebView with worse network latency than a native browser — minimizing round-trips is critical.
+One request, everything the UI needs. Telegram Mini Apps run inside an embedded WebView with worse network latency than a native browser — minimizing round-trips matters.
 
 ---
 
 ## Telegram Bot API — The Parts Nobody Talks About
-
-The Telegram Bot API is well-documented for basic use. But building a companion that feels *natural* requires solving problems the docs don't cover.
 
 ### Message Debouncing
 
@@ -132,75 +112,64 @@ Real people don't send one long paragraph. They send 3-5 rapid-fire messages:
   <p style={{fontSize: "0.85rem", color: "#888", marginTop: "0.5rem"}}><em>Aki's own description of what it is — split naturally across multiple messages, the way people actually text</em></p>
 </div>
 
-If you process each message independently, you get 3-5 separate LLM calls, each lacking the context of the others. The response feels fragmented and expensive.
+If you process each message independently, you get 3-5 separate LLM calls, each missing the context of the others. The response is fragmented and costs 3-5x more than it should.
 
-The solution is **debouncing** — buffer incoming messages and wait for a pause before processing them all as one:
+The fix is debouncing — buffer incoming messages and wait for a pause before processing them as one:
 
 ```python
 async def handle_text_message(self, update, context):
     chat_id = update.effective_chat.id
     message_text = update.message.text
 
-    # Buffer the message
     if chat_id not in self._message_buffers:
         self._message_buffers[chat_id] = []
     self._message_buffers[chat_id].append(message_text)
 
-    # Cancel any existing debounce timer
     if chat_id in self._debounce_tasks:
         self._debounce_tasks[chat_id].cancel()
 
-    # Start a new debounce timer (0.5 seconds)
     self._debounce_tasks[chat_id] = asyncio.create_task(
         self._process_buffered_messages(chat_id)
     )
 ```
 
-After 0.5 seconds of silence, all buffered messages get joined with `\n` and processed as a single input. The delay is configurable — too low and you split multi-message thoughts; too high and the bot feels slow.
+After 0.5 seconds of silence, all buffered messages get joined with `\n` and processed as one. The delay is configurable — too low and you split multi-message thoughts; too high and it feels slow.
 
 ### Multi-Bubble Responses
 
-Just as people send multiple messages, Aki responds in multiple short bubbles too. The `SoulAgent` supports a `[BREAK]` marker in its XML response schema that splits a single LLM response into multiple Telegram messages:
+Aki responds in multiple short bubbles too. The `SoulAgent` uses a `[BREAK]` marker in its XML response schema that splits one LLM response into multiple Telegram messages:
 
 <div style={{textAlign: "center", margin: "2rem 0"}}>
   <img src="/images/aki-companion/multi-bubble-response.png" alt="Aki responding in three short, natural messages instead of one wall of text" style={{width: "70%", margin: "auto", borderRadius: "8px"}} />
-  <p style={{fontSize: "0.85rem", color: "#888", marginTop: "0.5rem"}}><em>Three short messages feel more natural than a single paragraph</em></p>
+  <p style={{fontSize: "0.85rem", color: "#888", marginTop: "0.5rem"}}><em>Three short messages feel more natural than one paragraph</em></p>
 </div>
 
-For longer single-block responses, there's also a smart splitter that breaks at sentence boundaries, targeting ~250 characters per chunk. The threshold is configurable via `AUTO_SPLIT_THRESHOLD` and `SMART_SPLIT_MAX_LENGTH`.
+For longer blocks where the LLM skips the `[BREAK]` instruction, there's a smart splitter that breaks at sentence boundaries targeting ~250 characters per chunk.
 
 ### Emoji Reactions and Typing Indicators
 
-Small touches make the difference between "talking to a bot" and "texting a friend."
-
-Aki generates an `<emoji>` tag in every response. If the emoji is a valid Telegram reaction (👍, ❤️, 🔥, etc.), it gets applied as a **message reaction** — the same way you'd react to a friend's message:
+Aki generates an `<emoji>` tag in every response. If the emoji is a valid Telegram reaction (👍, ❤️, 🔥, etc.), it gets applied as a message reaction:
 
 <div style={{textAlign: "center", margin: "2rem 0"}}>
-  <img src="/images/aki-companion/emoji-reaction.png" alt="Emoji reactions applied to a message — a small detail that makes the interaction feel human" style={{width: "40%", margin: "auto", borderRadius: "8px"}} />
+  <img src="/images/aki-companion/emoji-reaction.png" alt="Emoji reactions applied to a message" style={{width: "40%", margin: "auto", borderRadius: "8px"}} />
   <p style={{fontSize: "0.85rem", color: "#888", marginTop: "0.5rem"}}><em>A quick reaction says more than words sometimes</em></p>
 </div>
 
-But doing this on every message would be annoying. So there's a **counter-based randomization**: a counter decrements with each message, and only when it hits zero does a reaction fire. Then it resets to a random value between `REACTION_MIN_MESSAGES` and `REACTION_MAX_MESSAGES`. This makes reactions feel spontaneous rather than mechanical.
+Doing this on every message would get annoying fast. So there's a counter-based randomization: a counter decrements with each message, and only when it hits zero does a reaction fire. Then it resets to a random value between `REACTION_MIN_MESSAGES` and `REACTION_MAX_MESSAGES`. Same pattern applies to stickers.
 
-The same pattern applies to stickers — Aki maintains a registry (`stickers.json`) mapping emojis to Telegram sticker `file_id`s, and occasionally sends one before the text response.
-
-Before each message, Aki also shows the **typing indicator**, scaled to the message length for realism:
+The typing indicator fires before each message, scaled to message length:
 
 <div style={{textAlign: "center", margin: "2rem 0"}}>
   <img src="/images/aki-companion/typing-indicator.png" alt="Typing indicator shown before Aki sends a response" style={{width: "30%", margin: "auto", borderRadius: "8px"}} />
-  <p style={{fontSize: "0.85rem", color: "#888", marginTop: "0.5rem"}}><em>The typing indicator — a simple UX detail that adds presence</em></p>
+  <p style={{fontSize: "0.85rem", color: "#888", marginTop: "0.5rem"}}><em>The typing indicator — a small UX detail that adds presence</em></p>
 </div>
 
 ### Rate Limiting
 
-With LLM calls costing real money, rate limiting is essential. Aki uses a **sliding-window rate limiter** — no Redis, just an in-memory dictionary:
+With LLM calls costing real money, rate limiting is not optional. Aki uses a sliding-window rate limiter — no Redis, just an in-memory dict:
 
 ```python
 class RateLimiter:
-    """
-    Sliding-window rate limiter for per-user message throttling.
-    Prevents spam and runaway LLM costs.
-    """
     def __init__(self, max_messages: int, window_seconds: int):
         self.max_messages = max_messages
         self.window_seconds = window_seconds
@@ -210,43 +179,39 @@ class RateLimiter:
         now = time.time()
         cutoff = now - self.window_seconds
 
-        # Get or create user's timestamp window
         timestamps = self._user_windows.setdefault(user_id, [])
-
-        # Prune expired timestamps
         timestamps[:] = [t for t in timestamps if t > cutoff]
 
         if len(timestamps) >= self.max_messages:
-            return False, 0  # Rate limited
+            return False, 0
 
         timestamps.append(now)
         return True, self.max_messages - len(timestamps)
 ```
 
-Default: 10 messages per 60-second window. When exceeded, Aki sends a friendly message instead of making an LLM call. The rate limiter is checked *after* debouncing — so a burst of 5 rapid messages counts as 1 toward the limit.
+Default: 10 messages per 60-second window. Rate limiting is checked *after* debouncing, so a burst of 5 rapid messages counts as 1 toward the limit.
 
 ### Proactive Reach-Outs
 
-Most chatbots are purely reactive — they wait for input. Aki can **initiate conversations**. An APScheduler cron job periodically scans for users who haven't messaged in a while. When it finds one, it calls `_generate_reach_out_message()`:
+Most chatbots just wait for input. Aki initiates conversations. An APScheduler cron job periodically scans for users who haven't messaged in a while. When it finds one, it generates a reach-out:
 
 <div style={{textAlign: "center", margin: "2rem 0"}}>
-  <img src="/images/aki-companion/proactive-reachout.png" alt="Aki initiating a conversation about reach-out schedulers — the feature commenting on its own existence" style={{width: "75%", margin: "auto", borderRadius: "8px"}} />
+  <img src="/images/aki-companion/proactive-reachout.png" alt="Aki initiating a conversation about reach-out schedulers" style={{width: "75%", margin: "auto", borderRadius: "8px"}} />
   <p style={{fontSize: "0.85rem", color: "#888", marginTop: "0.5rem"}}><em>Aki checking in proactively — teasing the user about the very feature that triggered the message</em></p>
 </div>
 
-The reach-out system uses the same tiered context (memories + recent conversations) as regular responses, but with a specialized `REACH_OUT_PROMPT` that instructs the LLM to pick up on *unfinished threads* — things the user mentioned but never resolved. The LLM can also return `SKIP` if it decides reach-out isn't appropriate (e.g., the user's last messages don't have any natural follow-up hooks).
+The reach-out uses the same tiered context (memories + recent conversations) as regular responses, but with a specialized prompt that tells the LLM to pick up on *unfinished threads* — things the user mentioned but never resolved. It can also return `SKIP` if there's nothing natural to follow up on.
 
-Users can configure reach-out behavior per-user: enable/disable, set minimum silence hours, and maximum silence days — all via Telegram commands like `/reachout_settings`.
+Users can configure reach-out behavior per-user: enable/disable, minimum silence hours, maximum silence days — all via Telegram commands.
 
 ---
 
-## The Memory System: Making an AI That Remembers
+## The Memory System
 
-The biggest limitation of most AI chatbots is amnesia. Every conversation starts from zero. Aki solves this with a **tiered memory architecture**:
+The biggest limitation of most AI chatbots is amnesia. Every conversation starts from zero. Aki handles this with a tiered memory architecture:
 
 ```
 System Prompt Context
-(what the LLM actually sees)
 │
 ├── Recent Exchanges (4 entries)
 │   └── Memory entries with emotional context
@@ -256,25 +221,20 @@ System Prompt Context
 │
 └── Current Conversation (20 msgs)
     └── Raw messages from the DB (most recent)
-
-        ▼
-
-Raw Conversation DB
-(all messages, forever)
 ```
 
 ### Layer 1: Raw Conversations
 
-Every message (user and assistant) is stored in the `conversations` table with a timestamp. This is the ground truth.
+Every message is stored in the `conversations` table with a timestamp. Ground truth.
 
 ### Layer 2: Compact Summaries and Conversation Memories
 
-Every 30 messages (configurable via `COMPACT_INTERVAL`), two things happen simultaneously:
+Every 30 messages (configurable via `COMPACT_INTERVAL`), two things happen in parallel:
 
-1. A **compact summary** is generated — a factual, timestamped paragraph condensing the exchange
-2. A **conversation memory** is created — an emotionally-aware reflection on what was significant
+1. A **compact summary** — factual, timestamped, condensing the exchange
+2. A **conversation memory** — an emotionally-aware reflection on what was significant
 
-These use different prompts with very different instructions:
+Different prompts, different purposes:
 
 ```python
 # COMPACT_PROMPT — factual, third-person record keeping
@@ -286,7 +246,7 @@ Include timestamps, key details, and any commitments made."""
 What would you want to remember about them from this exchange?"""
 ```
 
-The trigger is **database-based**, not in-memory. The agent queries the count of messages since the last diary entry — this means memory creation survives server restarts, which is critical for a production service that gets redeployed.
+The trigger is database-based, not in-memory. The agent queries message count since the last diary entry — this means memory creation survives server restarts.
 
 ### Context Assembly: The Glue Overlap
 
@@ -304,29 +264,28 @@ async def _build_conversation_context(self, user_id, full_history, user):
     # This creates continuity between summarized and raw context
 ```
 
-The 3 overlap messages ensure there's no "gap" between where the memory summary ends and where the raw conversation picks up. Without this, the LLM would sometimes lose track of the conversational thread.
+The 3 overlap messages prevent a gap between where the memory summary ends and where the raw conversation picks up. Without this, the LLM loses the conversational thread.
 
 ### Prompt Caching
 
-Anthropic's prompt caching can save up to **90% on input costs** — but only if you structure your prompts correctly. The system prompt is split into two blocks:
+Anthropic's prompt caching can save up to 90% on input costs — but only if you structure prompts correctly. The system prompt splits into two blocks:
 
 ```python
 SYSTEM_STATIC = """[persona, response format, rules]
 {persona}
 ...response format instructions...
-"""  # ← This is identical across calls → cacheable
+"""  # ← Identical across calls → cacheable
 
 SYSTEM_DYNAMIC = """
 {recent_exchanges}
 {conversation_history}
 Current time: {current_time}
-"""  # ← This changes every call → not cached
+"""  # ← Changes every call → not cached
 ```
 
-The LLM client applies `cache_control` breakpoints to the static block, so Anthropic can serve it from cache on subsequent calls. With the Anthropic beta header:
+The LLM client applies `cache_control` breakpoints to the static block. With the Anthropic beta header:
 
 ```python
-# In the LLM client, automatically added when cache_control is detected
 if has_cache_control and "claude" in model.lower():
     kwargs["extra_headers"] = {
         "anthropic-beta": "prompt-caching-2024-07-31"
@@ -335,18 +294,16 @@ if has_cache_control and "claude" in model.lower():
 
 ---
 
-## Cost Engineering: The Part Nobody Warns You About
+## Cost Engineering
 
-Here's the uncomfortable truth about building an always-on AI companion: **it's expensive if you're not careful**. Every message, every memory creation, every daily message, every reach-out — they all cost tokens. Multiply that by users and days, and costs add up fast.
+An always-on AI companion is expensive if you're not paying attention. Every message, memory creation, daily message, reach-out — they all cost tokens. Here's how I kept it from getting out of hand.
 
 ### LiteLLM as the Abstraction Layer
 
-Aki uses [LiteLLM](https://github.com/BerriAI/litellm) to abstract away provider differences. One function call, swap models by changing a string:
+Aki uses [LiteLLM](https://github.com/BerriAI/litellm) to abstract away provider differences. Swap models by changing a string:
 
 ```python
 class LLMClient:
-    """Unified LLM client supporting multiple providers via LiteLLM."""
-
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(...))
     async def chat_with_usage(self, model, messages, **kwargs):
         response = await litellm.acompletion(
@@ -365,16 +322,13 @@ class LLMClient:
         )
 ```
 
-The convenience sounds great until you hit the gotchas:
-- **Cache token reporting differs between providers.** Anthropic reports `cache_read_input_tokens` and `cache_creation_input_tokens`. OpenAI doesn't. You need `getattr` with defaults everywhere.
-- **Provider prefix stripping.** LiteLLM sometimes prepends `anthropic/` or `openai/` to model names. Your pricing lookup needs to handle `anthropic/claude-haiku-4-5-20251001` → `claude-haiku-4-5-20251001`.
+The gotchas: cache token reporting differs between providers, and LiteLLM sometimes prepends `anthropic/` or `openai/` to model names. You need `getattr` with defaults everywhere, and your pricing lookup needs to handle both name formats.
 
 ### Five Model Slots
 
-Not all tasks need the same model. Aki uses **five configurable model slots**, each tunable from a single `.env` file:
+Not all tasks need the same model:
 
 ```python
-# config/settings.py — all individually configurable
 MODEL_CONVERSATION  = "claude-haiku-4-5-20251001"  # Main chat
 MODEL_PROACTIVE     = "claude-haiku-4-5-20251001"  # Reach-outs
 MODEL_MEMORY        = "claude-haiku-4-5-20251001"  # Summaries
@@ -382,11 +336,11 @@ MODEL_DAILY_MESSAGE = "claude-haiku-4-5-20251001"  # Daily quotes
 MODEL_INSIGHTS      = "claude-haiku-4-5-20251001"  # Personalized insights
 ```
 
-During development, I used Sonnet for everything — great quality, terrifying bill. In production, Haiku handles most tasks at **~10x lower cost** with acceptable quality. The conversation model is the one slot where upgrading to Sonnet makes the most noticeable difference.
+During development I used Sonnet for everything — great quality, terrifying bill. In production, Haiku handles most tasks at ~10x lower cost with acceptable quality. The conversation model is usually the only slot where upgrading makes a noticeable difference.
 
 ### The Pricing Module
 
-Every LLM call records its token usage to the `token_usage` table with a `call_type` label. The pricing module then calculates estimated costs, including Anthropic's cache multipliers:
+Every LLM call records token usage to the `token_usage` table with a `call_type` label. The pricing module calculates estimated costs, including Anthropic's cache multipliers:
 
 ```python
 def calculate_cost(model, input_tokens, output_tokens,
@@ -396,44 +350,33 @@ def calculate_cost(model, input_tokens, output_tokens,
     cost_input  = (input_tokens / 1_000_000) * pricing["input"]
     cost_output = (output_tokens / 1_000_000) * pricing["output"]
 
-    # Anthropic cache pricing multipliers
     cost_cache_write = (cache_creation_tokens / 1_000_000) * (pricing["input"] * 1.25)
     cost_cache_read  = (cache_read_tokens / 1_000_000) * (pricing["input"] * 0.1)
 
     return cost_input + cost_output + cost_cache_write + cost_cache_read
 ```
 
-The `get_model_pricing()` function handles version suffixes (`claude-3-5-sonnet-20241022` → matches `claude-3-5-sonnet`) and provider prefixes, falling back to a conservative default if no match is found.
-
 ### Per-User Token Budgets
 
-As a final guardrail, there's a `USER_DAILY_TOKEN_BUDGET` setting. When set to a non-zero value, the orchestrator checks the user's daily token consumption before every LLM call and cuts off if exceeded. This prevents a single active user from blowing through your monthly budget in one evening.
+There's a `USER_DAILY_TOKEN_BUDGET` setting. When set, the orchestrator checks daily token consumption before every LLM call. One active user won't blow through your monthly budget in an evening.
 
 ---
 
 ## The Operations Dashboard
 
-You can't manage what you can't measure. Early on, I built a **Streamlit dashboard** (804 lines) for monitoring beta testers in real time.
-
-The dashboard connects directly to the production PostgreSQL database and provides 7 tabs:
+I built a Streamlit dashboard early — before adding any real users — so I could see exactly where tokens were going. 7 tabs:
 
 | Tab | What It Shows |
 |-----|--------------|
-| 🏠 Home | Total users, messages, tokens, lifetime cost, top cost driver model |
+| 🏠 Home | Total users, messages, tokens, lifetime cost, top cost driver |
 | 👤 Overview | Per-user quick stats |
 | 💬 Conversations | Scrollable chat log with expandable `<thinking>` blocks |
-| 📔 Diary | Memory entries filterable by type (conversation_memory, compact_summary, daily_message, etc.) |
-| 💸 Usage | Daily token trends, per-model cost breakdown, daily budget progress bars, call type distribution |
+| 📔 Diary | Memory entries filterable by type |
+| 💸 Usage | Daily token trends, per-model cost breakdown, call type distribution |
 | 💾 Database | Raw record counts and conversation span |
 | ⚙️ Settings | Per-user reach-out configuration |
 
-The **Usage tab** was the most valuable during beta. It showed me:
-- Which model was eating the most budget (Sonnet for insights generation)
-- How much prompt caching was actually saving (visible via cache hit counts)
-- Which `call_type` consumed the most tokens (conversations >> reach-outs >> daily messages)
-- Whether individual users were approaching their daily token budget
-
-Running it is a single command:
+The Usage tab revealed: Sonnet for insights generation was eating most of the budget. Cache hit counts showed real savings. Call type distribution showed conversations massively outweigh reach-outs and daily messages.
 
 ```bash
 uv run streamlit run scripts/dashboard.py
@@ -441,26 +384,22 @@ uv run streamlit run scripts/dashboard.py
 
 ---
 
-## Lessons Learned
+## What Actually Mattered
 
-After months of building, deploying, and iterating on Aki, here are the patterns that stuck:
+A few things I'd tell myself at the start:
 
-**Message debouncing is not optional.** Without it, rapid-fire messages produce fragmented responses and 3-5x higher costs. The 0.5-second debounce window hits the right balance between responsiveness and coherence.
+**Debouncing is non-negotiable.** Without it, rapid-fire messages produce fragmented, expensive responses. 0.5 seconds is the right window — long enough to catch multi-message thoughts, short enough to feel immediate.
 
-**Prompt caching pays for itself immediately.** Structuring the system prompt into static (persona, format) and dynamic (conversation, time) blocks with Anthropic's `cache_control` breakpoints reduced input costs significantly. The key insight: you only need two breakpoints.
+**Build cost visibility before inviting anyone.** The Streamlit dashboard was one of the first things I built. By the time beta testers joined, I could see where every token was going.
 
-**Build cost visibility before adding users.** The Streamlit dashboard was one of the first things I built. By the time beta testers joined, I could see exactly where tokens were going and which model changes would have the most impact.
+**Database-based triggers, not in-memory counters.** Memory creation is triggered by querying message count in the database, not by a counter in RAM. The bot can restart or crash without losing track of when to create the next memory entry.
 
-**Telegram Mini Apps are underrated.** Embedding a full Vite/TypeScript app inside Telegram via `MenuButtonWebApp` gives you a rich UI without asking users to download another app. The unified dashboard endpoint (`/api/dashboard/{telegram_id}`) keeps the Mini App snappy by fetching everything in one round-trip.
+**Telegram Mini Apps are underrated.** Embedding a full Vite/TypeScript app inside Telegram via `MenuButtonWebApp` gives you a rich UI without asking users to download anything. The unified dashboard endpoint keeps it snappy.
 
-**Database-based triggers beat in-memory state.** Memory creation is triggered by counting messages in the database, not by an in-memory counter. This means the bot can restart, redeploy, or crash without losing track of when to create the next memory entry.
-
-**Different tasks deserve different models.** Running Haiku for background tasks (daily messages, reach-outs, memory generation) and reserving Sonnet for conversations saved over 80% on batch costs while maintaining the quality where it matters.
+**Cheap models for background tasks, better models for conversation.** Haiku for memory generation, reach-outs, and daily messages. Sonnet when it actually matters. The cost difference is significant; the quality difference for background tasks is marginal.
 
 ---
 
-## Wrapping Up
+Aki started as a curiosity — what would it take to make an AI that actually knows you? The interesting problems turned out to have nothing to do with prompts. They were infrastructure: how you manage state across restarts, how you control costs before they spiral, how you handle the timing quirks of a platform built for humans texting each other.
 
-Aki started as a "what if I could build a friend?" experiment and turned into a lesson in production AI systems. The interesting problems aren't the LLM calls — they're the infrastructure: how you manage state, control costs, handle timing, and make the whole thing feel natural on a platform (Telegram) that has its own constraints and capabilities.
-
-If you're building something similar, my advice is: start with the boring parts. Get your cost tracking, rate limiting, and memory management right before you optimize prompts. The prompts will change a hundred times. The infrastructure has to work from day one.
+If you're building something similar: get the boring parts right first. Your prompts will change constantly. The infrastructure has to work from day one.
