@@ -3,6 +3,7 @@ import { MDXRemote } from "next-mdx-remote/rsc";
 import { getPostBySlug, getAllSlugs } from "@/lib/blog";
 import { mdxComponents } from "@/components/mdx-components";
 import rehypePrettyCode from "rehype-pretty-code";
+import remarkGfm from "remark-gfm";
 import type { Metadata } from "next";
 
 interface Props {
@@ -32,6 +33,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 const mdxOptions = {
+    remarkPlugins: [remarkGfm],
     rehypePlugins: [
         [
             rehypePrettyCode,
