@@ -1,0 +1,305 @@
+---
+title: "Part 3: Aki - The Performance Architecture"
+date: 2026-03-09
+categories: [AI, Software Engineering]
+tags: [Python, FastAPI, asyncio, PostgreSQL, Claude, Performance, Architecture]
+---
+
+This is the third post in the Aki series. Part 1 covered the Telegram infrastructure. Part 2 covered the conversational techniques. This one is about the operational side: how a single Python process handles multiple users without grinding to a halt, and how I kept latency low without throwing money at it.
+
+> The source code is on GitHub, found [here](https://github.com/simonryu328/aki). The project landing page is at [aki-landing.vercel.app](https://aki-landing.vercel.app/). Part 1 is [here](/blog/building-ai-companion-telegram) and Part 2 is [here](/blog/conversational-ai-agent-techniques).
+
+---
+
+## The Core Principle
+
+Every optimization layer in Aki follows the same idea: do less work in the path that the user is waiting on, and defer or skip everything else.
+
+The full request flow looks like this:
+
+```
+User Message
+     │
+     ▼
+┌─────────────────────────────────────────────────────────┐
+│  TELEGRAM WEBHOOK (FastAPI / uvicorn, async)            │
+│                                                         │
+│  ► Debounce Buffer (asyncio tasks)                      │
+│  ► Rate Limiter (in-memory sliding window)              │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│  ORCHESTRATOR                                           │
+│                                                         │
+│  ► User fetch (TTL cache → PostgreSQL async pool)       │
+│  ► Conversation history fetch (async pool)              │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│  SOUL AGENT                                             │
+│                                                         │
+│  ► Prompt constructed with cache breakpoints            │
+│  ► LLM call (cached prefix, async via LiteLLM)          │
+│  ► Background: memory creation (asyncio.create_task)    │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│  TELEGRAM DELIVERY                                      │
+│                                                         │
+│  ► "Typing..." indicator (proportional to message len)  │
+│  ► Multi-message smart splitting                        │
+│  ► Sticker / reaction (non-blocking)                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+The only steps the user actually waits on are the LLM call and the Telegram delivery. Everything else is either already done (cache hits), happens in the background, or costs less than a millisecond.
+
+---
+
+## The Exact Sequence Per Message
+
+Here is what actually happens, in order, for every incoming message:
+
+```
+1.  Telegram webhook POST → FastAPI handler (≈ 0ms, immediate 200 OK)
+2.  handle_text_message()
+    └─ Append to _message_buffers[chat_id]
+    └─ Cancel / restart asyncio debounce task
+3.  [DEBOUNCE WAIT: 0.5s]
+4.  _process_buffered_messages()
+    └─ Combine buffered messages into one
+    └─ rate_limiter.check_rate_limit()           ← in-memory, 0ms
+5.  orchestrator.process_message()
+    ├─ await memory.get_or_create_user()         ← TTL cache hit, ~1ms
+    │                                               or async DB fetch, ~5ms
+    ├─ await memory.add_conversation(user)        ← async DB insert
+    └─ await memory.db.get_recent_conversations() ← async DB select
+6.  soul_agent.respond()
+    ├─ await _build_conversation_context()        ← async DB fetch, cached prompt
+    ├─ Construct prompt (3 blocks + cache hints)
+    └─ await llm_client.chat_with_system_and_usage()  ← LLM call (300–1500ms)
+7.  Store assistant reply                         ← async DB insert
+8.  asyncio.create_task(record_token_usage)       ← fire & forget, non-blocking
+9.  asyncio.create_task(_maybe_create_compact_summary) ← fire & forget
+10. _send_with_typing()                           ← Telegram API call
+    └─ Typing indicator loop (proportional delay)
+    └─ send_message()
+```
+
+The LLM call at step 6 is where the time actually goes. Steps 8 and 9 are background tasks that run after the reply is already on its way to the user.
+
+---
+
+## Layer 1 — Debounce Buffer
+
+People text in fragments. A thought often arrives as three messages in 600ms. Without buffering, that's three LLM calls at three times the cost, each missing the context of the others.
+
+The debounce buffer works by canceling and restarting a timer on every incoming message:
+
+```python
+# Cancel any existing debounce timer for this chat
+if chat_id in self._debounce_tasks:
+    self._debounce_tasks[chat_id].cancel()
+
+# Start a new debounce timer (resets on each new message)
+self._debounce_tasks[chat_id] = asyncio.create_task(
+    self._process_buffered_messages(chat_id)
+)
+```
+
+After 0.5 seconds of silence, the messages are joined and sent as one request. The entire buffer and debounce logic uses `asyncio` tasks with no threads involved. Rate limiting runs after debouncing, so a burst of five rapid messages counts as one against the per-user limit.
+
+---
+
+## Layer 2 — Async Database Engine
+
+The database layer is built on SQLAlchemy async with `asyncpg`. Every query is non-blocking. While one user's query is waiting on PostgreSQL, the event loop can handle incoming requests from other users.
+
+```python
+self.engine = create_async_engine(
+    db_url,
+    pool_size=10,       # Up to 10 concurrent DB connections
+    max_overflow=20,    # Up to 20 additional during spikes
+    pool_pre_ping=True, # Test connection before use
+    pool_recycle=3600,  # Recycle after 1 hour
+)
+```
+
+`pool_pre_ping` detects stale connections before handing them to a request. `pool_recycle` prevents PostgreSQL from dropping long-idle connections. The pool supports up to 30 simultaneous database operations before anything starts queuing.
+
+---
+
+## Layer 3 — In-Memory User Cache
+
+The most-read piece of data in the system is the user record. It gets fetched on every single message to get the user's name, timezone, and settings. Hitting the database for this 100 times a day per active user is wasteful.
+
+`AsyncMemoryManager` keeps a TTL cache for user objects:
+
+```python
+self._user_cache = TTLCache(maxsize=100, ttl=300)  # 5-minute TTL
+```
+
+The first message fetches from PostgreSQL and writes to the cache. Every subsequent message within five minutes is a dictionary lookup that costs essentially nothing. When a user object is mutated (for example, timezone update), the cache entry is evicted immediately to prevent serving stale data.
+
+---
+
+## Layer 4 — LLM Prompt Caching
+
+The LLM call is the most expensive operation in the pipeline. Anthropic supports prompt caching: if the beginning of a system prompt is identical to a previous request, they return cached embeddings at 10% of the normal input token cost and with lower latency.
+
+Aki's prompt is structured in three blocks to maximize cache hits:
+
+```python
+system_prompt_blocks = [
+    {
+        "type": "text",
+        "text": static_text,          # Persona + format instructions
+        "cache_control": {"type": "ephemeral"}  # BREAKPOINT 1
+    },
+    {
+        "type": "text",
+        "text": exchanges_block,       # Recent summaries/memories
+        "cache_control": {"type": "ephemeral"}  # BREAKPOINT 2
+    },
+    {
+        "type": "text",
+        "text": volatile_block         # Current conversation + time (NOT cached)
+    }
+]
+```
+
+| Block | Content | Changes When | Cached |
+|---|---|---|---|
+| `static_text` | Persona + format rules | Never | Yes |
+| `exchanges_block` | Recent memory summaries | Every ~30 messages | Yes |
+| `volatile_block` | Current conversation + clock time | Every message | No |
+
+The persona block is typically 1,500 to 3,000 tokens. On a cache hit, that entire chunk costs 10% of what it normally would, and latency drops by 200 to 400ms on larger contexts.
+
+---
+
+## Layer 5 — Background Tasks
+
+Several operations happen after the reply is already heading back to the user:
+
+**Memory consolidation.** Every ~30 messages, Aki compresses conversation history into a compact summary and a memory entry. This is a secondary LLM call and it should never be in the user's critical path:
+
+```python
+# Fired AFTER returning the result
+asyncio.create_task(
+    self._maybe_create_compact_summary(
+        user_id=user_id,
+        conversation_history=conversation_history,
+    )
+)
+```
+
+**Token tracking.** Recording how many tokens were consumed per call type is also offloaded:
+
+```python
+asyncio.create_task(
+    self.memory.record_token_usage(
+        user_id=user_id,
+        model=result.usage.model,
+        ...
+    )
+)
+```
+
+Both tasks run concurrently while the typing indicator is showing. By the time Aki finishes typing, the background work is either done or in-flight. The user never waits on either of these.
+
+---
+
+## Layer 6 — Retry Logic
+
+Network blips, PostgreSQL hiccups, and LLM provider rate limits all happen eventually. Retrying manually every time would be tedious and error-prone. I used `tenacity` to handle this with exponential backoff:
+
+```python
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(SQLAlchemyError),
+)
+async def get_or_create_user(self, ...):
+    ...
+```
+
+This retries up to three times, waiting 2s, then 4s, then 8s between attempts. It only retries on SQLAlchemy errors, not programming errors. The same pattern is applied to LLM calls to handle Anthropic and OpenAI 429s and 5xx errors without crashing the process.
+
+---
+
+## Layer 7 — Message Splitting
+
+Telegram has a 4,096-character hard limit per message. A naive splitter that cuts mid-word feels wrong. Aki uses a sentence-aware splitter:
+
+- Splits at sentence boundaries (`.`, `!`, `?` )
+- Falls back to paragraph boundaries if needed
+- Targets 250 characters per chunk (`SMART_SPLIT_MAX_LENGTH`)
+
+The shorter chunks also improve perceived speed. The user sees the first message land immediately while subsequent parts arrive in sequence. Waiting for one long message to appear feels slower than watching three short ones arrive.
+
+---
+
+## Layer 8 — Rate Limiting
+
+LLM calls cost real money per request. Rate limiting protects both costs and system stability. Aki uses a sliding-window rate limiter per user:
+
+```
+Default: 10 messages per 60-second window
+```
+
+The check is entirely in-memory — a `deque` per user tracking message timestamps — so it costs nothing. When a user hits the limit, the bot responds with a canned friendly message without touching the LLM at all. Burst messages are already collapsed by the debounce layer, so a rapid five-message burst counts as one against the window.
+
+---
+
+## Scalability: One Process, Async Through
+
+Aki runs as a single Python async process on Railway. This is not an accident or a shortcut. For the current user load, it's the right call.
+
+**What scales naturally in this model:**
+
+- Multiple simultaneous users. Because all I/O is async, one user's LLM wait doesn't block anyone else. The event loop services all users concurrently.
+- Database concurrency. The connection pool handles up to 30 simultaneous operations.
+- Webhook concurrency. FastAPI and uvicorn queue incoming webhooks and dispatch them into the event loop.
+
+**Where horizontal scaling would make sense:**
+
+If user volume grew to thousands of concurrent active users, the architecture can extend without a full rewrite:
+
+1. **Multiple uvicorn workers** (`--workers N`): Each worker is a separate process with its own event loop and connection pool. The reverse proxy distributes webhook updates across them.
+2. **Redis-backed caching**: Replace the in-process `TTLCache` with Redis so cached user data is shared across workers.
+3. **Task queue**: Move `asyncio.create_task()` background jobs to Celery or ARQ to offload memory consolidation from the web process.
+
+None of these need to happen until they actually need to happen. Premature distribution is its own kind of technical debt.
+
+---
+
+## Configuration Reference
+
+Every performance-sensitive setting is controlled via environment variables:
+
+| Setting | Default | Description |
+|---|---|---|
+| `DEBOUNCE_SECONDS` | `0.5` | Wait time before processing buffered messages |
+| `CONVERSATION_CONTEXT_LIMIT` | `20` | Raw messages included in current context |
+| `MEMORY_ENTRY_LIMIT` | `4` | Memory summaries shown to agent |
+| `COMPACT_INTERVAL` | `30` | Messages between memory consolidation runs |
+| `USER_RATE_LIMIT_MESSAGES` | `10` | Max messages per window per user |
+| `USER_RATE_LIMIT_WINDOW_SECONDS` | `60` | Sliding window for rate limit |
+| `USER_DAILY_TOKEN_BUDGET` | `0` | Max tokens per day per user (0 = disabled) |
+| `SMART_SPLIT_MAX_LENGTH` | `250` | Target characters per message chunk |
+| `AUTO_SPLIT_THRESHOLD` | `300` | Minimum length before splitting is triggered |
+| `LOG_RAW_LLM` | `false` | Log LLM responses at INFO level |
+
+---
+
+## What I Actually Learned
+
+The layers add up. No single one of them is the thing that makes Aki feel fast. It's the combination: the debounce buffer collapses redundant calls, the cache avoids repeating database lookups, the prompt caching cuts LLM costs, and the background tasks keep the critical path short.
+
+If there's one thing I'd call out: async everywhere or don't bother. One blocking call anywhere in the chain stalls the entire event loop. I found a few during development by noticing other users' responses suddenly getting slow. Tracking those down and replacing them with async equivalents made a visible difference.
+
+The rest is just not doing unnecessary work.
