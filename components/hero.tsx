@@ -20,6 +20,12 @@ export function Hero() {
     const [isJumping, setIsJumping] = useState(false);
     const [obstacles, setObstacles] = useState<{ id: number; x: number }[]>([]);
     const [gameOver, setGameOver] = useState(false);
+    const [flightCount, setFlightCount] = useState(0);
+    const [isFlying, setIsFlying] = useState(false);
+    const [easterEggActive, setEasterEggActive] = useState(false);
+    const [gameSessionCount, setGameSessionCount] = useState(0);
+    const [flightSessionCount, setFlightSessionCount] = useState(0);
+    const [dynamicMessage, setDynamicMessage] = useState("");
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -94,14 +100,16 @@ export function Hero() {
                 // Collision Detection - Aki sits at -150
                 const charX = -150;
                 const hit = moved.some(o => (
-                    o.x > charX - 18 &&
-                    o.x < charX + 18 &&
+                    o.x > charX - 10 &&
+                    o.x < charX + 10 &&
                     !isJumping
                 ));
 
                 if (hit) {
                     setGameOver(true);
                     setAkiPose("ouch");
+                    setEasterEggActive(false);
+                    setIsFlying(false);
                     return moved;
                 }
 
@@ -122,13 +130,62 @@ export function Hero() {
         return () => clearInterval(gameLoop);
     }, [gameActive, gameOver, isJumping, obstacles.length]);
 
+    const [flightDialogue, setFlightDialogue] = useState("");
+    const [lastJumpTime, setLastJumpTime] = useState(0);
+
+    const FLIGHT_MESSAGES = [
+        "This is kind of boring...",
+        "Didn't you come here for the blog?",
+        "I'm basically a Bird-Aki now.",
+        "Wheeeee!",
+        "Is this legal?",
+        "I see my house from here!",
+    ];
+
     const handleJump = () => {
-        if (isJumping || !gameActive || gameOver) return;
+        if (!gameActive || gameOver) return;
+
+        const now = Date.now();
+
+        if (isJumping) {
+            setFlightCount(prev => {
+                const next = prev + 1;
+                // Trigger flight easter egg
+                if (next === 4 && !easterEggActive) {
+                    setEasterEggActive(true);
+                    setShowMessage(true);
+
+                    if (flightSessionCount === 0) {
+                        setFlightDialogue("Wait...");
+                        setTimeout(() => setFlightDialogue("I CAN FLY!"), 800);
+                    } else {
+                        const randomMsg = FLIGHT_MESSAGES[Math.floor(Math.random() * FLIGHT_MESSAGES.length)];
+                        setFlightDialogue(randomMsg);
+                    }
+
+                    setFlightSessionCount(s => s + 1);
+                    setTimeout(() => setShowMessage(false), 3000);
+                }
+                return next;
+            });
+        }
+
         setIsJumping(true);
         setAkiPose("jump");
+        setLastJumpTime(now);
+
+        const jumpDuration = 450;
         setTimeout(() => {
-            setIsJumping(false);
-        }, 400); // Snappier: Shorter jump duration
+            setLastJumpTime(prevTime => {
+                if (prevTime === now) {
+                    setIsJumping(false);
+                    setFlightCount(0);
+                    setEasterEggActive(false);
+                    setShowMessage(false);
+                }
+                return prevTime;
+            });
+        }, jumpDuration);
     };
 
     useEffect(() => {
@@ -145,11 +202,20 @@ export function Hero() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [gameActive, isJumping, gameOver]);
 
-    const dialogues = [
+    const INITIAL_DIALOGUES = [
         { text: "Ouch!", pose: "ouch" as const },
         { text: "Stop that!", pose: "annoyed" as const },
         { text: "I'm busy...", pose: "annoyed" as const },
         { text: "LETS RUN!", pose: "jump" as const },
+    ];
+
+    const REPEAT_MESSAGES = [
+        "Again?",
+        "Ugh, really?",
+        "You really like this game...",
+        "Fine, but this is the last time!",
+        "Can't you just read my GitHub?",
+        "I need a raise.",
     ];
 
     const handleAkiClick = () => {
@@ -160,26 +226,48 @@ export function Hero() {
         }
 
         setIsWandering(false);
-        const nextClick = (clickCount + 1) % (dialogues.length + 1);
-        setClickCount(nextClick);
+        setShowMessage(true);
 
-        if (nextClick > 0 && nextClick <= dialogues.length) {
-            setAkiPose(dialogues[nextClick - 1].pose);
-            setShowMessage(true);
-            setTargetX(prev => prev);
+        if (gameSessionCount === 0) {
+            const nextClick = (clickCount + 1);
+            setClickCount(nextClick);
+
+            if (nextClick <= INITIAL_DIALOGUES.length) {
+                const d = INITIAL_DIALOGUES[nextClick - 1];
+                setDynamicMessage(d.text);
+                setAkiPose(d.pose);
+
+                setTimeout(() => {
+                    setShowMessage(false);
+                    if (nextClick === INITIAL_DIALOGUES.length) {
+                        setGameActive(true);
+                        setGameSessionCount(1);
+                        setTargetX(-150);
+                    } else {
+                        setAkiPose("idle");
+                    }
+                }, 1000);
+            }
+        } else {
+            // Diverse responses for repeat players
+            const randomMsg = REPEAT_MESSAGES[Math.floor(Math.random() * REPEAT_MESSAGES.length)];
+            setDynamicMessage(randomMsg);
+            setAkiPose("annoyed");
 
             setTimeout(() => {
-                setShowMessage(false);
-                if (nextClick === dialogues.length) {
-                    // Transition to Game Mode
-                    setTargetX(-150); // Snap to start position
-                    setGameActive(true);
-                } else {
-                    setAkiPose("idle");
-                }
-            }, 1000);
-        } else {
-            resetGame();
+                setDynamicMessage("Ready?");
+                setAkiPose("idle");
+                setTimeout(() => {
+                    setDynamicMessage("GO!");
+                    setAkiPose("jump");
+                    setTimeout(() => {
+                        setShowMessage(false);
+                        setGameActive(true);
+                        setTargetX(-150);
+                        setGameSessionCount(prev => prev + 1);
+                    }, 600);
+                }, 800);
+            }, 1200);
         }
     };
 
@@ -197,7 +285,7 @@ export function Hero() {
     const expertise = ["AI Engineering", "LLM Systems", "Computer Vision"];
 
     return (
-        <section className="relative mb-16 pt-8 group">
+        <section className="relative mb-8 pt-8 group">
             {/* Spotlight effect */}
             <div
                 className="pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-100 transition duration-300 z-0 spotlight"
@@ -241,7 +329,13 @@ export function Hero() {
                 </div>
 
                 {/* Bit-aki Track Arena */}
-                <div className="relative h-16 mt-16 flex items-center justify-center select-none">
+                <motion.div
+                    animate={{
+                        marginTop: gameActive ? "8rem" : "2rem",
+                        marginBottom: gameActive ? "4rem" : "0rem"
+                    }}
+                    className="relative h-16 flex items-center justify-center select-none"
+                >
                     <motion.div
                         animate={gameActive ? { width: "100%", maxWidth: "600px" } : { width: "100%", maxWidth: "400px" }}
                         className="relative h-full flex items-end justify-center border-b border-neutral-100 dark:border-neutral-900/50"
@@ -250,9 +344,9 @@ export function Hero() {
                         <AnimatePresence>
                             {gameActive && (
                                 <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="absolute top-0 w-full flex justify-between px-4 font-pixel text-[10px] text-neutral-400 uppercase tracking-wider"
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="absolute bottom-full mb-8 w-full flex justify-between px-4 font-pixel text-[14px] text-neutral-400 uppercase tracking-wider"
                                 >
                                     <span>SCORE: {score.toString().padStart(5, '0')}</span>
                                     {gameOver ? (
@@ -264,28 +358,11 @@ export function Hero() {
                             )}
                         </AnimatePresence>
 
-                        <AnimatePresence>
-                            {showMessage && (
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.8, y: 5 }}
-                                    animate={{ opacity: 1, scale: 1, y: -10 }}
-                                    exit={{ opacity: 0, scale: 0.8, y: 5 }}
-                                    className="absolute bottom-full mb-2 whitespace-nowrap z-30"
-                                    style={{ left: `calc(50% + ${targetX}px)` }}
-                                >
-                                    <div className="bg-white dark:bg-neutral-900 border-2 border-neutral-900 dark:border-white p-2 text-[10px] font-pixel leading-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)]">
-                                        {dialogues[clickCount - 1]?.text}
-                                    </div>
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-white dark:bg-neutral-900 border-r-2 border-b-2 border-neutral-900 dark:border-white rotate-45 -mt-[5px]" />
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
                         {/* Obstacles */}
                         {obstacles.map(o => (
                             <motion.div
                                 key={o.id}
-                                className="absolute bottom-0 w-3 h-5 bg-neutral-900 dark:bg-white"
+                                className="absolute bottom-0 w-3 h-8 bg-neutral-900 dark:bg-white"
                                 style={{ left: `calc(50% + ${o.x}px)` }}
                                 initial={{ opacity: 0, scale: 0 }}
                                 animate={{ opacity: 1, scale: 1 }}
@@ -307,15 +384,31 @@ export function Hero() {
                                     ease: isJumping ? "easeOut" : "easeIn"
                                 }
                             }}
-                            className="absolute bottom-0 cursor-pointer p-0 z-20"
+                            className="absolute bottom-0 cursor-pointer p-0 z-20 flex flex-col items-center"
                             onClick={gameOver ? resetGame : handleAkiClick}
                         >
+                            <AnimatePresence>
+                                {showMessage && (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.8, y: 5 }}
+                                        animate={{ opacity: 1, scale: 1, y: -5 }}
+                                        exit={{ opacity: 0, scale: 0.8, y: 5 }}
+                                        className="absolute bottom-full mb-3 whitespace-nowrap z-30 flex flex-col items-center"
+                                    >
+                                        <div className="bg-white dark:bg-neutral-900 border-2 border-neutral-900 dark:border-white p-3 text-[14px] font-pixel leading-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]">
+                                            {easterEggActive ? flightDialogue : dynamicMessage}
+                                        </div>
+                                        <div className="w-3 h-3 bg-white dark:bg-neutral-900 border-r-2 border-b-2 border-neutral-900 dark:border-white rotate-45 -mt-[7px] z-10" />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
                             <div className="pb-px"> {/* Tiny offset to sit perfectly on line */}
                                 <PixelAki pose={akiPose} size={32} className="text-neutral-900 dark:text-white transition-transform active:scale-90" />
                             </div>
                         </motion.div>
                     </motion.div>
-                </div>
+                </motion.div>
             </motion.div>
         </section>
     );
