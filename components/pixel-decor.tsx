@@ -62,7 +62,7 @@ export function PixelDecor({
 
     // Helper to get color based on character and type
     const getPixelColor = (char: string) => {
-        if (char === "X") return "text-neutral-200 dark:text-neutral-800";
+        if (char === "X") return "text-neutral-200 dark:text-neutral-700";
         return null;
     };
 
