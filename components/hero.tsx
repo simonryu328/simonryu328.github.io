@@ -1,11 +1,25 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { PixelAki } from "./pixel-aki";
 
 export function Hero() {
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+    const [akiPose, setAkiPose] = useState<"idle" | "walk1" | "walk2" | "jump" | "ouch" | "annoyed">("idle");
+    const [clickCount, setClickCount] = useState(0);
+    const [showMessage, setShowMessage] = useState(false);
+    const [targetX, setTargetX] = useState(0);
+    const [isWandering, setIsWandering] = useState(true);
+    // const [facingLeft, setFacingLeft] = useState(false); // Removed facingLeft state
+
+    // Game States
+    const [gameActive, setGameActive] = useState(false);
+    const [score, setScore] = useState(0);
+    const [isJumping, setIsJumping] = useState(false);
+    const [obstacles, setObstacles] = useState<{ id: number; x: number }[]>([]);
+    const [gameOver, setGameOver] = useState(false);
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -15,6 +29,170 @@ export function Hero() {
         window.addEventListener("mousemove", handleMouseMove);
         return () => window.removeEventListener("mousemove", handleMouseMove);
     }, []);
+
+    // Autonomous Wandering Logic
+    useEffect(() => {
+        let wanderTimer: NodeJS.Timeout;
+        let stopTimer: NodeJS.Timeout;
+
+        if (showMessage || gameActive || clickCount === 4) {
+            setIsWandering(false);
+            return;
+        }
+
+        const wander = () => {
+            setIsWandering(true);
+            const newTarget = (Math.random() - 0.5) * 400;
+            setTargetX(newTarget);
+
+            const waitTime = Math.random() * 2000 + 1000;
+            stopTimer = setTimeout(() => {
+                setIsWandering(false);
+                setAkiPose("idle");
+            }, 400);
+
+            return waitTime;
+        };
+
+        const nextWander = () => {
+            const wait = wander();
+            wanderTimer = setTimeout(nextWander, wait);
+        };
+
+        nextWander();
+
+        return () => {
+            clearTimeout(wanderTimer);
+            clearTimeout(stopTimer);
+        };
+    }, [showMessage, clickCount, gameActive]);
+
+    // Animation cycle for walking
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if ((isWandering || (gameActive && !isJumping && !gameOver)) && akiPose !== "ouch" && akiPose !== "annoyed") {
+            interval = setInterval(() => {
+                setAkiPose(p => (p === "walk1" || p === "idle") ? "walk2" : "walk1");
+            }, gameActive ? 60 : 80);
+        } else if (!isWandering && !showMessage && !gameActive) {
+            setAkiPose("idle");
+        }
+        return () => clearInterval(interval);
+    }, [isWandering, showMessage, akiPose, gameActive, isJumping, gameOver]);
+
+    // Game Engine
+    useEffect(() => {
+        if (!gameActive || gameOver) return;
+
+        // Force start position one more time to be sure
+        setTargetX(-150);
+
+        const gameLoop = setInterval(() => {
+            setObstacles(prev => {
+                const moved = prev.map(o => ({ ...o, x: o.x - 9 })); // Harder: Faster speed
+
+                // Collision Detection - Aki sits at -150
+                const charX = -150;
+                const hit = moved.some(o => (
+                    o.x > charX - 18 &&
+                    o.x < charX + 18 &&
+                    !isJumping
+                ));
+
+                if (hit) {
+                    setGameOver(true);
+                    setAkiPose("ouch");
+                    return moved;
+                }
+
+                // Score & cleanup
+                if (moved.length > 0 && moved[0].x < -300) {
+                    setScore(s => s + 10);
+                    return moved.slice(1);
+                }
+                return moved;
+            });
+
+            // Spawn obstacles harder: More frequent spawning
+            if (Math.random() > 0.94 && (obstacles.length === 0 || obstacles[obstacles.length - 1].x < 80)) {
+                setObstacles(prev => [...prev, { id: Date.now(), x: 300 }]);
+            }
+        }, 20);
+
+        return () => clearInterval(gameLoop);
+    }, [gameActive, gameOver, isJumping, obstacles.length]);
+
+    const handleJump = () => {
+        if (isJumping || !gameActive || gameOver) return;
+        setIsJumping(true);
+        setAkiPose("jump");
+        setTimeout(() => {
+            setIsJumping(false);
+        }, 400); // Snappier: Shorter jump duration
+    };
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === "Space") {
+                e.preventDefault();
+                if (gameActive) {
+                    if (gameOver) resetGame();
+                    else handleJump();
+                }
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [gameActive, isJumping, gameOver]);
+
+    const dialogues = [
+        { text: "Ouch!", pose: "ouch" as const },
+        { text: "Stop that!", pose: "annoyed" as const },
+        { text: "I'm busy...", pose: "annoyed" as const },
+        { text: "LETS RUN!", pose: "jump" as const },
+    ];
+
+    const handleAkiClick = () => {
+        if (gameActive) {
+            if (gameOver) resetGame();
+            else handleJump();
+            return;
+        }
+
+        setIsWandering(false);
+        const nextClick = (clickCount + 1) % (dialogues.length + 1);
+        setClickCount(nextClick);
+
+        if (nextClick > 0 && nextClick <= dialogues.length) {
+            setAkiPose(dialogues[nextClick - 1].pose);
+            setShowMessage(true);
+            setTargetX(prev => prev);
+
+            setTimeout(() => {
+                setShowMessage(false);
+                if (nextClick === dialogues.length) {
+                    // Transition to Game Mode
+                    setTargetX(-150); // Snap to start position
+                    setGameActive(true);
+                } else {
+                    setAkiPose("idle");
+                }
+            }, 1000);
+        } else {
+            resetGame();
+        }
+    };
+
+    const resetGame = () => {
+        setGameActive(false);
+        setGameOver(false);
+        setScore(0);
+        setObstacles([]);
+        setClickCount(0);
+        setAkiPose("idle");
+        setTargetX(0);
+        setIsWandering(true);
+    };
 
     const expertise = ["AI Engineering", "LLM Systems", "Computer Vision"];
 
@@ -35,27 +213,15 @@ export function Hero() {
                 transition={{ duration: 0.5 }}
                 className="relative z-10"
             >
-                <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 text-neutral-900 dark:text-white">
-                    Simon Ryu
-                </h1>
-                <p className="text-lg sm:text-xl text-neutral-600 dark:text-neutral-400 leading-relaxed max-w-xl">
-                    AI Engineer at IBM. I build production AI systems — from Telegram
-                    companions with persistent memory to computer vision pipelines.
-                </p>
-
-                <div className="flex flex-wrap gap-2 mt-6">
-                    {expertise.map((skill, i) => (
-                        <motion.span
-                            key={skill}
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: 0.2 + i * 0.1 }}
-                            className="text-xs font-medium px-3 py-1 rounded-full border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50 text-neutral-500"
-                        >
-                            {skill}
-                        </motion.span>
-                    ))}
+                <div className="mb-4">
+                    <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-neutral-900 dark:text-white">
+                        Simon Ryu
+                    </h1>
                 </div>
+
+                <p className="text-lg sm:text-xl text-neutral-600 dark:text-neutral-400 leading-relaxed max-w-xl">
+                    AI Engineer at IBM. Engineering Physics grad. I build production AI systems for Fortune 500 clients by day — and ship my own at night. AI companion bots, computer vision pipelines, agents that actually work.
+                </p>
 
                 <div className="flex flex-wrap gap-4 mt-8">
                     <Link
@@ -72,6 +238,83 @@ export function Hero() {
                     >
                         GitHub
                     </a>
+                </div>
+
+                {/* Bit-aki Track Arena */}
+                <div className="relative h-16 mt-16 flex items-center justify-center select-none">
+                    <motion.div
+                        animate={gameActive ? { width: "100%", maxWidth: "600px" } : { width: "100%", maxWidth: "400px" }}
+                        className="relative h-full flex items-end justify-center border-b border-neutral-100 dark:border-neutral-900/50"
+                    >
+                        {/* Game UI Overlay */}
+                        <AnimatePresence>
+                            {gameActive && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="absolute top-0 w-full flex justify-between px-4 font-pixel text-[10px] text-neutral-400 uppercase tracking-wider"
+                                >
+                                    <span>SCORE: {score.toString().padStart(5, '0')}</span>
+                                    {gameOver ? (
+                                        <span className="text-red-500 animate-pulse font-bold">GAME OVER! PRESS SPACE</span>
+                                    ) : (
+                                        <span>SPACE TO JUMP</span>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        <AnimatePresence>
+                            {showMessage && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.8, y: 5 }}
+                                    animate={{ opacity: 1, scale: 1, y: -10 }}
+                                    exit={{ opacity: 0, scale: 0.8, y: 5 }}
+                                    className="absolute bottom-full mb-2 whitespace-nowrap z-30"
+                                    style={{ left: `calc(50% + ${targetX}px)` }}
+                                >
+                                    <div className="bg-white dark:bg-neutral-900 border-2 border-neutral-900 dark:border-white p-2 text-[10px] font-pixel leading-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)]">
+                                        {dialogues[clickCount - 1]?.text}
+                                    </div>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-white dark:bg-neutral-900 border-r-2 border-b-2 border-neutral-900 dark:border-white rotate-45 -mt-[5px]" />
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {/* Obstacles */}
+                        {obstacles.map(o => (
+                            <motion.div
+                                key={o.id}
+                                className="absolute bottom-0 w-3 h-5 bg-neutral-900 dark:bg-white"
+                                style={{ left: `calc(50% + ${o.x}px)` }}
+                                initial={{ opacity: 0, scale: 0 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                            />
+                        ))}
+
+                        <motion.div
+                            animate={{
+                                x: targetX,
+                                y: isJumping ? -45 : 0
+                            }}
+                            transition={{
+                                x: {
+                                    duration: (gameActive && obstacles.length === 0) ? 0 : 0.4,
+                                    ease: "easeOut"
+                                },
+                                y: {
+                                    duration: 0.25,
+                                    ease: isJumping ? "easeOut" : "easeIn"
+                                }
+                            }}
+                            className="absolute bottom-0 cursor-pointer p-0 z-20"
+                            onClick={gameOver ? resetGame : handleAkiClick}
+                        >
+                            <div className="pb-px"> {/* Tiny offset to sit perfectly on line */}
+                                <PixelAki pose={akiPose} size={32} className="text-neutral-900 dark:text-white transition-transform active:scale-90" />
+                            </div>
+                        </motion.div>
+                    </motion.div>
                 </div>
             </motion.div>
         </section>

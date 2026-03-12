@@ -25,11 +25,9 @@ html {
 }
 
 .spotlight {
-  background: radial-gradient(
-    600px circle at var(--x) var(--y),
-    rgba(255, 255, 255, 0.06),
-    transparent 40%
-  );
+  background: radial-gradient(600px circle at var(--x) var(--y),
+      rgba(255, 255, 255, 0.06),
+      transparent 40%);
 }
 
 /* Scrollbar styling for code blocks */
