@@ -5,29 +5,21 @@ categories: [AI, Software Engineering]
 tags: [LLM, Python, Claude, Prompt Engineering, Memory, Architecture]
 ---
 
-Building a conversational AI agent isn't hard. Building one that actually works, that remembers who you are, costs a reasonable amount to run, and doesn't feel like talking to a form, is a different problem. This is a breakdown of the techniques behind Aki, the AI companion I built on Telegram. I found these patterns were what I needed to make something I'd actually want to talk to every day.
+Building a conversational AI agent isn't structurally difficult—you take a user's text, send it to an API, and return the response. But building one that actually works, that remembers who you are, costs a reasonable amount to run, and doesn't feel like talking to a rigid corporate form, is an entirely different engineering challenge. 
 
-> The source code is on GitHub, found [here](https://github.com/simonryu328/aki). The project landing page is at [aki-landing.vercel.app](https://aki-landing.vercel.app/). The first part of this series covering the Telegram infrastructure is [here](/blog/building-ai-companion-telegram).
+This post is a deep dive into the conversational techniques and memory systems behind the AI companion I built on Telegram. I realized that a good companion needs to handle a few specific problems: overcoming LLM statelessness, bridging short-term exchanges with a long-term sense of identity, managing context window limits, and utilizing structured schemas to make the AI output feel more human.
 
----
-
-## The Core Problems
-
-Before I got into the implementation details, I had to figure out which problems were actually worth solving. I realized that a good companion needs to handle a few specific things:
-
-- **Memory**: LLMs are stateless. Every call is a blank slate. I had to find a way to reconstruct context manually.
-- **Continuity**: Relationships deepen over time. I needed a way to bridge short-term exchanges with a long-term sense of who the person is.
-- **Context limits**: LLM context windows are finite and expensive. I couldn't just dump the entire conversation history on every call.
-- **Personality**: Raw LLM output often sounds like an AI. I needed persona engineering to make it feel human.
-- **Proactivity**: Real companions reach out first. I built a scheduler-driven mechanism to initiate contact.
+> The source code is on GitHub, found [here](https://github.com/simonryu328/aki-the-bot). The project landing page is at [aki-landing.vercel.app](https://aki-landing.vercel.app/). The first part of this series covering the Telegram infrastructure and my personal journey building this is [here](/blog/building-ai-companion-telegram).
 
 ---
 
-## LLM Integration Layer
+## The LLM Integration Layer
 
 ### Multi-Provider Abstraction via LiteLLM
 
-I didn't want to couple my code directly to OpenAI or Anthropic SDKs. I use LiteLLM as a universal adapter. It lets me treat different providers the same way:
+When I started designing the agent's core "brain," I knew I didn't want to tightly couple my codebase directly to the OpenAI or Anthropic SDKs. Models change too rapidly, and I needed the flexibility to benchmark different providers against each other without rewriting my logic.
+
+I integrated [LiteLLM](https://github.com/BerriAI/litellm) as a universal adapter. It proxies requests and normalizes the input/output schemas so I can treat entirely different LLM providers the exact same way:
 
 ```python
 # utils/llm_client.py
@@ -39,105 +31,41 @@ response = await litellm.acompletion(
 )
 ```
 
-This gave me the flexibility to swap models without touching the core agent logic. When model pricing or capabilities change, I can just update a config line. This flexibility saved me a lot of time as I experimented with different setups.
-
-### Retry Logic with Exponential Backoff
-
-LLM APIs fail sometimes. Whether it's network errors, rate limits, or a provider being overloaded, I needed a way to handle it gracefully. I used the `tenacity` library to handle retries:
-
-```python
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    reraise=True,
-)
-async def chat(self, model, messages, ...):
-    ...
-```
-
-The exponential backoff means that if the first retry fails, the next one waits a bit longer. This gives the API time to recover without hammering it with requests.
-
-### Tracking Usage
-
-I built two methods into my client. One just returns the string content, which is fine for background tasks. The other, `chat_with_usage`, returns an `LLMResponse` that include token counts:
-
-```python
-@dataclass
-class LLMResponse:
-    content: str
-    model: str
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
-    cache_read_tokens: int      # Prompt caching hits (Anthropic)
-    cache_creation_tokens: int  # Prompt caching writes (Anthropic)
-```
-
-I found I needed these counts for per-user daily budgets and to understand which parts of my logic were eating up the most tokens.
+This abstraction proved essential. It gave me the freedom to swap models on the fly by simply changing an environment variable. If Anthropic experiences an outage, I can instantly route traffic to OpenAI. 
 
 ### Dedicated Models Per Task
 
-I realized pretty quickly that I didn't need the most expensive model for every single task. I split my usage across different models:
+With LiteLLM abstracting the APIs, I quickly realized that treating every LLM task equally was a massive waste of resources. I didn't need the heaviest, most expensive frontier model to summarize a chat log.
+
+I created a model-routing configuration that splits workload across different LLMs based on task complexity:
 
 ```python
-MODEL_CONVERSATION:  "claude-haiku-4-5-20251001"   # Fast, cheap. This runs for every message.
-MODEL_MEMORY:        "claude-haiku-4-5-20251001"   # Background task. Latency doesn't matter here.
-MODEL_INSIGHTS:      "claude-sonnet-4-5-20250929"  # Expensive but rare. used for weekly features.
-MODEL_DAILY_MESSAGE: "claude-haiku-4-5-20251001"   # Simple generation. Haiku is more than enough.
+# Configuration Router
+MODEL_CONVERSATION  = "claude-haiku-4-5-20251001"   # Fast, cheap. Runs for every message.
+MODEL_MEMORY        = "claude-haiku-4-5-20251001"   # Background task. Latency doesn't matter here.
+MODEL_INSIGHTS      = "claude-sonnet-4-5-20250929"  # Expensive but rare. Used for weekly features.
+MODEL_DAILY_MESSAGE = "claude-haiku-4-5-20251001"   # Simple generation. Haiku is more than enough.
 ```
 
-My rule was simple: use the cheapest model that meets the quality requirement. I reserved the heavy models for high-value, low-frequency tasks.
+The golden rule here became: **use the cheapest model that consistently clears the quality threshold.** I reserved the heavy, expensive models exclusively for high-value, low-frequency tasks (like generating deep weekly insights about the user), while keeping the moment-to-moment chat relegated to faster, cheaper variants.
 
 ---
 
-## Prompt Engineering
-
-### The System Prompt Architecture
-
-I split Aki's system prompt into three layers based on how often they change. This setup helped me optimize for caching:
-
-```
-┌─────────────────────────────────────────┐
-│  LAYER 1: STATIC (changes rarely)       │
-│  - Aki's identity ("You are Aki...")    │
-│  - Persona definition                   │
-│  - Output format specification          │
-│  → This stays in the cache.             │
-└─────────────────────────────────────────┘
-┌─────────────────────────────────────────┐
-│  LAYER 2: SEMI-STATIC (changes slowly)  │
-│  - Recent memory entries                │
-│  - Compact summaries of past exchanges  │
-│  → Stable for many messages.            │
-└─────────────────────────────────────────┘
-┌─────────────────────────────────────────┐
-│  LAYER 3: VOLATILE (changes every msg)  │
-│  - Current conversation (last 20 msgs)  │
-│  - Current time context                 │
-│  → Changes constantly.                  │
-└─────────────────────────────────────────┘
-```
-
-```python
-system_prompt_blocks = [
-    {"type": "text", "text": static_text,     "cache_control": {"type": "ephemeral"}},  # 1st breakpoint
-    {"type": "text", "text": exchanges_block, "cache_control": {"type": "ephemeral"}},  # 2nd breakpoint
-    {"type": "text", "text": volatile_block},  # No cache
-]
-```
-
-Anthropic's prompt caching cut my costs significantly. By keeping the volatile content at the end of the prompt, I could reuse the cached tokens from the first two layers for most of my calls.
+## Prompt Engineering & Persona Design
 
 ### Structured Output via XML
 
-I tried asking the LLM to just "respond naturally" but it was too hit-or-miss. Now I enforce a strict XML schema. XML is great because it's more forgiving than JSON. If a closing tag is missing, I can usually still parse it.
+Early on, I tried prompting the LLM with generic instructions like "respond naturally." It was incredibly inconsistent. LLMs, left to their own devices, will often default back to "As an AI..." safety guardrails or adopt an overly formal, robotic tone.
+
+To fix this, I abandoned free-text output and enforced a strict XML schema for every single response. I chose XML over JSON because I found LLMs are far less likely to break XML formatting when generating creative text, and it's easier to regex-parse a missing close-tag than a missing JSON bracket.
 
 ```xml
 <?xml version="1.0"?>
 <message>
   <thinking>
     Internal reasoning. Never shown to user.
-    What's happening? React or ask?
+    What's happening? Did they ask a question or make a statement?
+    Should I match their energy, react, or ask a follow-up?
   </thinking>
   <emoji>❤️</emoji>
   <response>
@@ -148,15 +76,15 @@ I tried asking the LLM to just "respond naturally" but it was too hit-or-miss. N
 
 ### The Thinking Layer
 
-The `<thinking>` block is something I added after realizing that the LLM needed a "warm up" period before outputting the visible message. It qualitatively improved the response quality because it gave the model space to reason through complex situations before committing to a visible answer. I also log these blocks, which has been invaluable for debugging why Aki said what she said.
+The `<thinking>` block was the single most impactful change to the conversational quality. I realized that the LLM needed a dedicated "warm up" workspace before outputting the visible message. 
 
-### `[BREAK]` Multi-Message Splitting
-
-Real texting doesn't usually happen in one big block. It's often multiple short messages. I instructed the model to use `[BREAK]` markers to indicate where a split should happen. My parser then splits the response and sends each chunk with a small typing delay. Three short messages feel a lot more personal than one long paragraph.
+When the model is forced to output the final message immediately, it often grasps for the most obvious, generic response. By forcing it to first write a private `<thinking>` block, it gets the space to reason through complex emotional subtext before committing to an answer. It qualitatively improved the agent's empathy. I also log these blocks, which has been invaluable for debugging why the agent hallucinated or reacted poorly.
 
 ### Time Context Injection
 
-Every message I send to the model includes the user's local time of day. "It's 2am" and "It's 10am" usually mean different things for context. I store the user's IANA timezone and convert all timestamps to their local time before generating context.
+A jarring flaw in many chatbots is time-blindness. If you say "I'm going to sleep," and the bot doesn't know it's 3:00 AM your time, its response will feel hollow. 
+
+Every system prompt I generate injects the user's localized time of day. I store the user's IANA timezone upon registration and convert all timestamps in the prompt to their local time. "It's 2am" and "It's 10am" drastically alter how the agent interprets the same message.
 
 ---
 
@@ -164,26 +92,14 @@ Every message I send to the model includes the user's local time of day. "It's 2
 
 ### The Problem with Statelessness
 
-Since LLMs have no persistent state, they don't remember anything between conversations. I had to build that "mind" in my database.
+Since LLMs have no persistent state, they suffer from amnesia. Every API call is a completely blank slate. I had to build a "mind" in my PostgreSQL database to manually reconstruct context for every interaction.
 
-### Two Memory Systems
-
-I use a dual-store approach to handle different types of queries:
-
-| System | Technology | My Goal |
-|--------|-----------|------|
-| **Structured Store** | PostgreSQL + SQLAlchemy | Give me the last 20 messages. |
-| **Semantic Store** | Pinecone (Vector DB) | What did they say about their sister? |
-
-### The Data Model
-
-I structured the database to follow how I thought a person might remember things:
+I structured the database to follow how a human actually processes and retains information:
 
 ```
 User
 ├── id, telegram_id, name, timezone
 ├── reach_out settings
-└── spotify tokens
 
 Conversation (the raw log)
 ├── user_id, role, message
@@ -195,120 +111,37 @@ DiaryEntry (the processed mind)
 ├── content, importance
 ├── exchange_start, exchange_end
 └── timestamp
-
-FutureEntry (plans and notes)
-├── entry_type: plan or note
-├── content, start_time
-└── is_completed
-
-TokenUsage (the money tracker)
-├── user_id, model, call_type
-├── input_tokens, output_tokens
-└── timestamp
 ```
 
-### Two Memory Entry Types
+### Events vs. Traits (Two Memory Systems)
 
-I found that I needed to differentiate between *events* and *traits*.
+I found that I needed to conceptually differentiate between remembering an *event* and understanding a *trait*. 
 
-**`compact_summary`** records what happened. For example: "On March 5, they talked about their job interview. They felt nervous but confident."
+1. **`compact_summary` (Events):** This records standard factual history. For example: *"On March 5, they talked about their job interview. They felt nervous but thought they answered the technical questions well."*
+2. **`conversation_memory` (Traits):** This records deeper psychological or behavioral reflections. For example: *"They tend to mask anxiety with dark humor. They care deeply about their career trajectory, even if they pretend they don't."*
 
-**`conversation_memory`** records who the person is. For example: "They tend to mask anxiety with humor. This interview matters to them more than they let on."
-
-By keeping both, Aki can remember that an event happened while also understanding the emotional weight behind it.
-
----
-
-## Context Window Management
-
-### Picking the Right Context
-
-I have access to over 100,000 tokens of context with Claude, but I wanted to keep my budget around 2,000 tokens per call to keep costs reasonable. I couldn't just dump everything in. I had to be selective.
-
-### Four-Layer Context Assembly
-
-My approach was to layer the context like this:
-
-1.  **Oldest Memory Entries**: Facts about the person from weeks or months ago.
-2.  **Recent Memory Entries**: More recent traits.
-3.  **Recent Summaries**: What we've been talking about lately.
-4.  **Raw History**: The last 20 messages for immediate context.
-
-This gives the model a sense of who the person is (long-term) and what's happening right now (short-term) without overwhelming it.
-
-### Preventing Duplication
-
-I had an issue early on where my context included both the raw messages and a summary that covered those same messages. It was a waste of tokens. I added logic to trim the raw messages so they only overlap slightly with the latest summary. This "glue" overlap keeps the conversation flowing without wasting space.
+By storing both types of records, the agent can reference a past event while also understanding the emotional weight behind it.
 
 ---
 
-## Compact Summarization
+## The Proactive Reach-Out System
 
-### Compressing History
+A companion shouldn't just sit statically waiting for you to query it. Real friends text first. They reach out when they haven't heard from you. 
 
-As the conversation history grows, I need to compress it. I set up a background task that triggers every 30 messages. It takes the latest batch of raw messages and compresses them into a `compact_summary` and a `conversation_memory`.
+I built an asynchronous APScheduler cron job that routinely scans the database for inactive users (e.g., users who haven't sent a message in more than 6 hours). When the system flags an inactive user, it gathers their recent `compact_summary` entries and passes them through a specialized proactive prompt.
 
-I made a few key decisions here:
-1.  **Database-triggered**: If the bot restarts, it doesn't lose the count.
-2.  **Background tasks**: The user gets their reply immediately. The summarization happens quietly in the background.
+Instead of generating a generic "checking in like a wellness app" message ( *"How are you feeling today?"* ), the prompt forces the LLM to scan the memory exclusively for **unfinished threads**. 
 
----
+The result is a notification that feels organic: *"Hey, did you ever finish writing that python script you were stressing over yesterday?"* 
 
-## Proactive Messaging
-
-### The Reach-Out System
-
-A friend doesn't just wait for you to text them. They reach out when they haven't heard from you in a while. I built a system that runs every hour to check for users who have been silent for more than a few hours.
-
-The prompt I wrote for this is very specific: "You're bored. Something they said is bugging you. Scan for an unfinished thread and ask about it." I wanted to avoid that "checking in like a wellness app" energy. It needs to feel organic, like someone actually remembered a detail from a previous talk.
-
-### Scheduled Messages
-
-I also added a `FutureEntry` system. If a user says "remind me to check my mail in 3 hours," Aki can use a tool to schedule that message. I used `dateparser` to handle natural language time parsing, so I don't have to worry about writing my own NLP date utility.
+The agent uses these reach-outs to prove it's actively "thinking" about the user even when the chat window is closed. (Naturally, users can configure the frequency, quiet-hours, or entirely disable these reach-outs via native Telegram commands).
 
 ---
 
-## Persona Design
+## Final Thoughts on Persona
 
-### Separating Frame from Personality
+The key takeaway from building the LLM layer of this agent was learning how to separate the *frame* from the *personality*. 
 
-I kept the structural scaffold (how Aki understands herself and the format) separate from the persona (her personality definition). This means I could theoretically switch Aki's personality just by swapping one file, without touching any of the core logic.
+The XML structure, the memory database triggers, the thinking blocks, and the time injection represent the **frame**. They dictate *how* the agent thinks. The actual system prompt describing its attitude represents the **personality**. By keeping these decoupled, I can entirely rewrite the agent's character just by swapping out a single text string, without ever touching the complex reasoning architecture beneath it.
 
-### Making the Persona Feel Real
-
-I found that abstract instructions like "be casual" didn't work well. I had better results with concrete principles:
-- **Mirror with gain**: Match their energy, but stay slightly more optimistic.
-- **React, don't interview**: Don't just ask questions. React to what they say. LMAO or "wait that's huge" goes a long way.
-- **Text like a human**: Use short messages and emojis where they fit.
-
----
-
-## Async Architecture
-
-### Why I Used Async
-
-Every message involves multiple database and API operations. If I ran them sequentially, the latency would be terrible. I used Python's `asyncio` to let these operations overlap. Anything that doesn't need to be finished before the reply is sent, like summarization or token tracking, is pushed into a background task.
-
----
-
-## Cost and Rate Control
-
-### Budgets and Limits
-
-To prevent any run-away costs, I built in a per-user daily token budget. If a user hits their limit, Aki will gracefully say something like "I've got a lot to think about today, let's pick this up tomorrow." It feels like part of her character rather than a system error.
-
-I also track usage per call type. This helped me see that my proactive messages were actually quite cheap compared to the main conversation, which gave me more confidence in letting them run.
-
----
-
-## Message Debouncing
-
-### The "Hey" Problem
-
-A lot of people text in fragments: "hey", then "i have a question", then the actual question. If I replied to every individual message, it would be a mess. I built a 0.5s debounce timer. It waits for a moment of silence before combining all those fragments into one single thought. It makes the interaction feel much more natural.
-
----
-
-## Final Thoughts
-
-The main thing I learned building Aki is that the LLM is just one small part of the system. The real work is in the "human" details—how context is selected, how messages are timed, and how the bot initiates contact. Most of my time was spent in the database and the prompt engineering, not in the model selection.
+In Part 3, I'll dive into the raw performance architecture: how I made this entire system run concurrently using Python's asyncio, how I handle debouncing, and how I manage the financial costs of rate limits and prompt caching.

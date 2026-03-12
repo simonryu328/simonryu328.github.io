@@ -8,11 +8,11 @@ image:
   alt: "Telegram chat interface connected to FastAPI, PostgreSQL, and AI infrastructure"
 ---
 
-I started this project after hearing about [OpenClaw](https://github.com/openclaw/openclaw)—an open-source AI assistant that runs autonomously and connects directly to messaging platforms like Telegram. The concept really fascinated me.
+I started this project after hearing about [OpenClaw](https://github.com/openclaw/openclaw)—an open-source AI assistant that runs autonomously and connects directly to messaging platforms like Telegram. Instead of just answering prompts in a sterile web interface, it executed real-world tasks and lived natively where people actually communicate. The concept really fascinated me.
 
-I wanted to make a Telegram bot that texts just like a human does. Think of it as passing a personal Turing Test. I didn't want a generic chatbot that just responds to prompts with a single wall of text; I wanted something that felt genuinely present. This meant the bot needed to be capable of sending multiple messages, triggering typing indicators, dropping emojis, reacting to my messages natively, and remembering our past interactions.
+I wanted to make a Telegram bot that texts just like a human does. Think of it as passing a personal Turing Test. I didn't want a generic chatbot that just responds to prompts with a single wall of text; I wanted something that felt genuinely present in my daily life. This meant the bot needed to be capable of sending multiple short messages instead of paragraphs, triggering typing indicators perfectly timed to response lengths, dropping emojis natively, reacting to my messages, and remembering context across weeks of conversations.
 
-This is the first part of my journal documenting the engineering decisions behind building this AI companion. The project is about ~5,000 lines of Python using FastAPI, python-telegram-bot, Claude, PostgreSQL, and LiteLLM. Instead of just showing API calls, I'll walk through the practical challenges of making an agent feel "alive"—like hosting webhooks alongside an engine, preventing fragmented thoughts through message debouncing, and managing an LLM's memory without bankrupting myself.
+This is the first part of my journal documenting the engineering decisions behind building this AI companion. Instead of just showing API calls, I'll walk through the practical challenges of making an agent feel "alive"—from hosting webhooks to engineering a robust operations dashboard, and designing a companion Mini App so the AI has a "life" outside the text box.
 
 > The source code is available on GitHub [here](https://github.com/simonryu328/aki-the-bot), and you can see the project landing page at [aki-landing.vercel.app](https://aki-landing.vercel.app/).
 
@@ -43,46 +43,81 @@ Railway (Cloud)
 └── Streamlit Dashboard (monitoring)
 ```
 
-The tech stack is fairly straightforward: FastAPI for the backend, `python-telegram-bot` to interface with Telegram, Claude via LiteLLM for the "brain", and PostgreSQL on Neon for memory. Everything is deployed on Railway.
+The tech stack is built for speed and asynchronous concurrency: a FastAPI backend engine, the `python-telegram-bot` wrapper to interface with Telegram's APIs, Claude via LiteLLM for the core reasoning "brain", and PostgreSQL on Neon for persistent memory. The entire application is deployed as a single process on Railway.
 
 ---
 
 ## Getting off the ground: Webhooks and APIs
 
-The first architectural hurdle was combining a Telegram bot, a REST API, and a frontend into a single process. 
+The first architectural hurdle was combining a Telegram bot, a REST API, and a React frontend into a single running process. 
 
-In development, bots usually rely on polling—constantly asking the Telegram servers if there are new messages. In production, webhooks are the standard: Telegram actively pushes events to my server instead. 
+During local development, bots usually rely on polling—constantly asking the Telegram servers if there are new messages in an endless HTTP loop. In production, webhooks are the standard: Telegram actively pushes events to a secure endpoint on my server instead. 
 
-Since my FastAPI server also needs to serve the Mini App frontend (a static HTML/JS/CSS bundle) and expose the REST endpoints it uses, I used FastAPI's lifespan pattern. This essentially boots up the bot alongside the API server:
+Since my FastAPI server also needs to serve the Telegram Mini App frontend (a static HTML/JS/CSS bundle) and expose the REST API endpoints it uses, I utilized FastAPI's lifespan context manager pattern. This essentially boots up the bot's listening service right alongside the API server:
 
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # Startup the underlying bot client
     await bot.start()
 
+    # If a webhook URL is defined in the env, register it with Telegram
     if settings.WEBHOOK_URL:
         await bot.application.bot.set_webhook(
             url=f"{settings.WEBHOOK_URL}/webhook/{settings.TELEGRAM_BOT_TOKEN}"
         )
 
-    yield  # App is running
+    yield  # App is actively running and serving traffic
 
-    # Shutdown
+    # Graceful Shutdown
     await bot.stop()
 
 app = FastAPI(title="AI Companion API", lifespan=lifespan)
 ```
 
-The `WEBHOOK_URL` environment variable acts as a switch. If it's set, the server relies on webhooks. If not, it falls back to polling, which is perfect for working locally.
+The `WEBHOOK_URL` environment variable acts as a master switch. If it's set in Railway, the server relies exclusively on webhooks. If not, it falls back to polling, which means I can still test the bot locally on my laptop without setting up `ngrok` tunnels.
 
-To minimize latency for the Telegram Mini App (which runs inside an embedded WebView), I created a single dashboard endpoint that delivers everything the UI needs in one shot:
+---
+
+## Nailing the UI/UX Details
+
+Building a sophisticated backend doesn't matter if interacting with the agent still feels robotic. To nail the Turing Test feel, I had to reverse-engineer how people actually text, and force the agent to mimic those patterns using Telegram's native tools.
+
+### Multi-Bubble Delivery
+Receiving a massive block of text from a friend feels awkward. Humans break up complex thoughts into separate chat bubbles. I engineered the response schema so the agent automatically splits longer responses along logical sentence boundaries. It sends them sequentially with a small delay between each bubble. Watching three short messages arrive sequentially feels substantially more natural than staring at a screen for five seconds and receiving a textbook paragraph.
+
+### Reactions and Typing Indicators
+I set up an output parser designed to capture specific emoji tags generated by the LLM. If the model outputs a valid Telegram emoji (like 👍, ❤️, or 🔥), the API backend doesn't send it as a text message—it actively applies it as a native reaction to my previous message.
+
+To balance this and prevent the bot from reacting to *every single message* (which gets annoying fast), I tied the functionality to a randomized cooling counter. It only reacts naturally when the internal countdown hits zero.
+
+Furthermore, I invoke Telegram's typing indicator API before every single message bubble is sent. The duration of the typing status scales proportionally with the character count of the incoming bubble. It’s a tiny detail, but it singlehandedly sells the illusion of physical presence.
+
+---
+
+## Giving it a "Life": The Telegram Mini App
+
+An LLM entirely contained inside a chat UI is just a conversationalist; it doesn't have a definitive "life" outside the text box. I wanted the agent to feel like it had a persistent existence.
+
+To fix this, I built a Telegram Mini App that lives seamlessly alongside the bot chat. A Mini App is fundamentally a web application rendered directly inside Telegram's native WebView, so the user never has to download an external app or open Safari. 
+
+The Mini App serves as the interface for the relationship. I split the UI into three specific panels, representing the timeline of the partnership:
+
+1. **Past**: Journals and diary entries written recursively by the bot in the background, summarizing the moods and major events of our past conversations.
+2. **Present**: A live dashboard featuring daily motivation quotes, a rotating "unhinged" quote of the day (stuff the user actually said), and a daily song recommendation pulling directly from a Spotify API integration.
+3. **Future**: A task-oriented tab tracking plans and reminders the agent has inferred from our chats.
+
+### The Unified Dashboard Endpoint
+
+Telegram Mini Apps inherently suffer from worse network latency than a native mobile browser. To prevent the frontend from displaying spinning loading wheels while fetching the Past, Present, and Future data separately, I structured the backend to deliver everything the UI needs in one monolithic shot:
 
 ```python
 @app.get("/api/dashboard/{telegram_id}")
 async def get_dashboard(telegram_id: int):
+    # Fetch user state via Postgres TTL Cache
     user = await memory_manager.get_or_create_user(telegram_id=telegram_id)
 
+    # Concurrently aggregate all timeline data
     memories   = await memory_manager.get_diary_entries(user.id, limit=50)
     daily_msg  = await _get_daily_message_data(telegram_id, user)
     soundtrack = await _get_daily_soundtrack_data(telegram_id, user)
@@ -99,145 +134,19 @@ async def get_dashboard(telegram_id: int):
     )
 ```
 
----
-
-## Making It Text Like a Human
-
-### Debouncing Fragmented Thoughts
-
-Real people rarely send perfectly formatted paragraphs. They text in fragments. They send "hey", followed three seconds later by "i have a question", followed by the actual question. 
-
-If my backend processed every single incoming text event independently, it would fire off three separate LLM calls. Each call would lack the context of the others, leading to fragmented, expensive, and contextually broken replies.
-
-To fix this, I implemented message debouncing. Incoming messages go into a buffer, and the system waits for a pause in typing before it groups them together:
-
-```python
-async def handle_text_message(self, update, context):
-    chat_id = update.effective_chat.id
-    message_text = update.message.text
-
-    if chat_id not in self._message_buffers:
-        self._message_buffers[chat_id] = []
-    self._message_buffers[chat_id].append(message_text)
-
-    if chat_id in self._debounce_tasks:
-        self._debounce_tasks[chat_id].cancel()
-
-    self._debounce_tasks[chat_id] = asyncio.create_task(
-        self._process_buffered_messages(chat_id)
-    )
-```
-
-After 0.5 seconds of silence, all the buffered texts join together and hit the LLM as a single thought. It's a small detail, but it entirely changes how natural the interaction feels.
-
-### Multi-Bubble Responses
-
-Just like it receives fragmented messages, the bot needs to be able to send them. Receiving a massive block of text from a friend feels awkward. To get around this, I engineered a schema where the agent uses a `[BREAK]` marker to split its own LLM response into multiple chat bubbles. 
-
-For longer generated texts where the model fails to use the marker, I added a safety net: a parser that automatically slices the response along sentence boundaries, aiming for roughly 250 characters per bubble.
-
-### Reactions and Typing Indicators
-
-To nail the Turing Test feel, I wanted the agent to use Telegram's native message reactions. I set up an `<emoji>` tag parser within the LLM's output constraints. If it outputs a valid Telegram emoji (like 👍, ❤️, or 🔥), the agent applies it as a reaction to my previous message instead of sending it as text.
-
-However, reacting to *every* message is annoying. So, I added a randomized cooling counter. The bot only reacts when the counter hits zero, after which it resets to a random range. I used the same logic for sending stickers dynamically.
-
-To sell the illusion of presence, I invoke Telegram's typing indicator before every message bubble is sent. The duration of the typing status scales proportionally with the character count of the incoming bubble.
-
-### Rate Limiting the Agent
-
-Since every API request literally costs money, I implemented a sliding-window rate limiter directly in memory (without bothering with Redis). 
-
-```python
-class RateLimiter:
-    def __init__(self, max_messages: int, window_seconds: int):
-        self.max_messages = max_messages
-        self.window_seconds = window_seconds
-        self._user_windows: Dict[int, List[float]] = {}
-
-    def check_rate_limit(self, user_id: int) -> tuple[bool, int]:
-        now = time.time()
-        cutoff = now - self.window_seconds
-
-        timestamps = self._user_windows.setdefault(user_id, [])
-        timestamps[:] = [t for t in timestamps if t > cutoff]
-
-        if len(timestamps) >= self.max_messages:
-            return False, 0
-
-        timestamps.append(now)
-        return True, self.max_messages - len(timestamps)
-```
-
-The default is 10 messages a minute. Because it's calculated *after* the debounce timer, a flurry of fragmented texts only counts as a single interaction against the limit.
-
-### Proactive Reach-Outs
-
-Most conversational AI is passive; it only speaks when spoken to. I wanted this agent to initiate contact. 
-
-I set up an APScheduler cron job that routinely checks the database for users who have been silent for a few hours. When it spots one, it passes their recent memory context into a specialized LLM prompt. The prompt searches for *unfinished threads*—topics that were mentioned earlier but never followed up on. 
-
-It feels genuinely surprising when your phone buzzes a day later to ask how that meeting you mentioned yesterday actually went. (I also added commands so users can tweak these reach-out boundaries natively).
+The catch is that the Mini App's content is inextricably linked to the chat interaction. If you don't talk to the bot, the journals don't update, the daily playlist algorithms stall, and the Mini App effectively "dies." The UI exists solely to fuel the conversation, and the conversation gives the UI purpose.
 
 ---
 
-## Tackling Amnesia: The Memory System
+## Building an Operations Dashboard early
 
-A major limitation of API-driven LLMs is their lack of persistent state. Out of the box, every prompt starts from scratch. To give the agent a persistent identity, I designed a tiered memory architecture:
+When you build an agent that acts autonomously—initiating reach-outs, compiling daily journals, reacting to texts—you are effectively giving it an open checkbook to your LLM API accounts. Before I ever invited beta testers to interact with the project, I built an internal operations dashboard using `Streamlit`. 
 
-```
-System Prompt Context
-│
-├── Recent Exchanges (4 entries)
-│   └── Memory entries with emotional context
-│
-├── Conversation Memories (diary)
-│   └── Personal diary entries, triggered by milestones
-│
-└── Current Conversation (20 msgs)
-    └── Raw messages from the DB (most recent)
-```
+The dashboard provides total visibility into the hidden systems:
+- An **Overview** of daily token trends and per-model cost breakdowns.
+- A **Conversations** tab to scroll through chat logs and inspect the invisible `<thinking>` blocks the LLM is generating.
+- A **Diary** tab tracking exactly what the bot is permanently committing to its PostgreSQL long-term memory.
 
-1. **Raw Conversations**: Every single message hit gets persisted in PostgreSQL.
-2. **Compact Summaries** & **Conversation Memories**: Every 30 messages (a customizable threshold), a background worker pulls the raw history and generates two things: a cold, factual summary of the events, and an emotionally-aware "diary" entry reflecting on my traits or mood.
+Building this observability layer *early* was crucial. It immediately revealed that generating deep insights using expensive frontier models was eating my entire budget, leading me to drastically rework my backend routing.
 
-To feed this memory cleanly back into the LLM without confusing it, I use a "glue overlap" technique. The system retrieves the most recent summaries, but deliberately overlaps them with the last 3 raw messages. This creates a seamless bridge between the past memories and the immediate, ongoing chat context, avoiding jarring temporal jumps.
-
-### Using Anthropic's Prompt Caching
-
-Anthropic's prompt caching is a lifesaver, cutting input token costs dramatically, but only if the prompt is structured carefully. I separated the bot's static personality instructions from its dynamic memory injections:
-
-```python
-SYSTEM_STATIC = """[persona, response format, rules]
-{persona}
-...response format instructions...
-"""  # ← Identical across calls → cacheable
-
-SYSTEM_DYNAMIC = """
-{recent_exchanges}
-{conversation_history}
-Current time: {current_time}
-"""  # ← Changes every call → not cached
-```
-
-By applying Anthropic's `cache_control` breakpoints to the static personality block, the LLM processes it for practically free on subsequent messages.
-
----
-
-## Controlling the Costs
-
-The problem with a bot that texts like a human is that it burns through money like one, too. I used [LiteLLM](https://github.com/BerriAI/litellm) as an abstraction layer to route requests based on their complexity.
-
-Instead of burning tokens on GPT-4o or Claude 3.5 Sonnet for everything, the background tasks (like memory compaction, daily insights, or the proactive reach-outs) route dynamically to Claude 3.5 Haiku. The cost-to-performance ratio makes an enormous difference.
-
-I also integrated a token-use monitor into my Streamlit dashboard, allowing me to view estimated costs factoring in Anthropic's cache multipliers before rolling the bot out to any active testers.
-
----
-
-## What Actually Mattered
-
-Looking back on this build, the things that really impacted the experience weren't clever prompt engineering tricks—they were infrastructure decisions. 
-
-Debouncing fragmented texts changed the entire rhythm of the interaction. Setting up background tasks to process memory thresholds ensured the bot never hung or felt sluggish during a chat. Offloading the UI into a Telegram Mini App meant avoiding App Store deployment while still having a rich graphical interface. 
-
-It started as an experiment in conversational AI, but ultimately turned into a crash course in system state, database-triggered events, and performance optimization.
+In **Part 2**, I'll dive deep into exactly how I built the LLM layer driving these interactions: from the XML schemas and persona engineering, to the specific database structure that prevents the agent from forgetting who you are.
