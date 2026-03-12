@@ -157,13 +157,13 @@ By storing both types of records, the agent can reference a past event while als
 
 A companion shouldn't just sit statically waiting for you to query it. Real friends text first. They reach out when they haven't heard from you. 
 
-I built an asynchronous APScheduler cron job that routinely scans the database for inactive users (e.g., users who haven't sent a message in more than 6 hours). When the system flags an inactive user, it gathers their recent `compact_summary` entries and passes them through a specialized proactive prompt.
+I built an asynchronous background task utilizing the `python-telegram-bot` strictly native `JobQueue` module (`run_repeating(..., interval=3600)`). Every 60 minutes, the orchestrator executes a wide `asyncpg` SQL sweep across the Neon PostgreSQL database, specifically looking for users who have not interacted with the bot in over 12 hours (the `min_silence_hours` threshold). When the scanner flags an inactive user, it gathers their recent `compact_summary` entries and passes them through a specialized proactive prompt.
 
 Instead of generating a generic "checking in like a wellness app" message ( *"How are you feeling today?"* ), the prompt forces the LLM to scan the memory exclusively for **unfinished threads**. 
 
 The result is a notification that feels organic: *"Hey, did you ever finish writing that python script you were stressing over yesterday?"* 
 
-The agent uses these reach-outs to prove it's actively "thinking" about the user even when the chat window is closed. (Naturally, users can configure the frequency, quiet-hours, or entirely disable these reach-outs via native Telegram commands).
+The agent uses these reach-outs to prove it's actively "thinking" about the user even when the chat window is closed. Naturally, users can configure the frequency, quiet-hours, or entirely disable these reach-outs via native Telegram commands (such as `/reachout_settings` which invokes an inline UI menu).
 
 ---
 

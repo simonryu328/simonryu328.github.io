@@ -210,6 +210,8 @@ system_prompt_blocks = [
 ]
 ```
 
-By explicitly commanding Anthropic to cache these components ephemerally, the 3,000-token persona block (which remains functionally identical on every request) registers as a cache hit. The cost drops dramatically by roughly 90%, and the API latency scales downward exponentially, processing vast amounts of memory data with almost zero overhead.
+By explicitly commanding Anthropic to cache these components ephemerally, the 3,000-token persona block (which remains functionally identical on every request) registers as a cache hit. 
+
+Anthropic's caching protocol is incredibly powerful for conversational agents: once a block is cached, subsequent "cache reads" are billed at a **90% discount** compared to base input token costs. Furthermore, because the architecture doesn't have to ingest thousands of static tokens on every turn, the API inference latency drops by upwards of **85%**. The cost plummets, and the bot responds significantly faster.
 
 When combined tightly with the `TTLCache` in-memory module caching the user state, the asynchronous database fetch queues, and the debounce message grouping—this Python setup manages an exceptionally complex, highly-contextual AI application without burning a hole in the project budget.
