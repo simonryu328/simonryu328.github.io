@@ -77,6 +77,31 @@ app = FastAPI(title="AI Companion API", lifespan=lifespan)
 
 The `WEBHOOK_URL` environment variable acts as a master switch. If it's set in Railway, the server relies exclusively on webhooks. If not, it falls back to polling, which means I can still test the bot locally on my laptop without setting up `ngrok` tunnels.
 
+### Securing the Webhook Route
+
+Exposing a public endpoint on the internet means it will inevitably get port-scanned. If that endpoint accepts POST data and processes it as an incoming chat message, a bad actor could easily forge fake Telegram updates and inject them straight into the LLM orchestration pipeline.
+
+To secure this, the registered Telegram webhook URL is dynamically suffixed with the actual Telegram Bot Token as a path parameter. The FastAPI route implicitly validates the token before it ever attempts to deserialize the JSON payload:
+
+```python
+@app.post("/webhook/{token}")
+async def webhook_handler(token: str, request: Request):
+    if token != settings.TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid token")
+    
+    try:
+        data = await request.json()
+        # De-serialize the raw JSON straight into a native python-telegram-bot object
+        update = Update.de_json(data, bot.application.bot)
+        await bot.application.process_update(update)
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Error processing webhook update: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+This ensures only authentic payloads actively initiated by Telegram's servers ever reach the underlying `python-telegram-bot` application architecture.
+
 ---
 
 ## Nailing the UI/UX Details

@@ -59,11 +59,33 @@ The only processes the user actively waits for are the prompt cache retrieval/LL
 
 ---
 
-## Asynchronous Foundations
+### Parallel Execution with Asyncio.Gather
+
+The fastest way to slow down a conversational agent is sequentially requesting multiple different pieces of data from a remote database. The agent needs three separate things before it can even begin to generate a response: the user's profile, recent raw chat logs, and long-term diary entries. 
+
+Instead of waiting for one database trip to resolve before starting the next, I used `asyncio.gather` in my `MemoryManager` to execute all three `asyncpg` SQL queries against the Neon database simultaneously:
+
+```python
+async def get_user_context(self, user_id: int) -> UserContextSchema:
+    # Multi-fetch using gather for performance
+    user_info, conversations, diary_entries = await asyncio.gather(
+        self.db.get_user_by_id(user_id),
+        self.db.get_recent_conversations(user_id, limit=settings.CONVERSATION_CONTEXT_LIMIT),
+        self.db.get_diary_entries(user_id, limit=settings.DIARY_FETCH_LIMIT),
+    )
+    
+    return UserContextSchema(
+        user_info=user_info,
+        recent_conversations=conversations,
+        diary_entries=diary_entries,
+    )
+```
+
+Because `get_user_by_id` usually hits the `TTLCache` in RAM (taking `0ms`), the event loop immediately starts the network requests for `get_recent_conversations` and `get_diary_entries` in parallel. The entire context retrieval phase rarely takes longer than a single database roundtrip (roughly `~25ms`), leaving the vast majority of the latency budget solely for the LLM inference.
 
 ### Database Pooling and Async I/O
 
-The backbone of this system relies entirely on Python's `asyncio` and an asynchronous database driver. 
+The backbone of this system relies entirely on Python's `asyncio` and an asynchronous database driver.  
 
 When an API processes sequential database reads/writes synchronously, it forces the entire event loop to freeze while waiting for PostgreSQL to respond across the network. By utilizing `asyncpg` within a high-throughput SQLAlchemy connection pool, the FastAPI webhook gracefully accepts new messages exactly when the database is fetching records for a different user.
 
@@ -151,11 +173,31 @@ self._debounce_tasks[chat_id] = asyncio.create_task(
 
 Under this model, the API holds the execution thread via `asyncio.sleep(0.5)` for precisely half a second. If the user stops typing, it merges the fragmented texts into a clean, unified payload and dispatches a singular API call. This effectively acts as cost-control middleware while giving the agent all the necessary context cleanly bundled.
 
-### Token Counting and Background Offloading
+### Asynchronous Token Budgeting
 
-Because tracking exact token consumption per model per user was vital for maintaining the `USER_DAILY_TOKEN_BUDGET` variable, I track usage via the database. However, executing this database write logic synchronously would delay the agent's delivery response to the telegram client.
+Because LLM token costs can spiral out of control if a malicious user decides to spam the bot with novels all afternoon, I hardcoded a safety valve: the `USER_DAILY_TOKEN_BUDGET`. 
 
-Similarly, every 30 messages, the system analyzes the chat log and generates a historical memory. Because these actions are critical internally but absolutely unessential for the user's perception of response speed, both are offloaded:
+Before the Orchestrator even invokes the heavy `SoulAgent` reasoning class, it runs a fast query aggregating the user's token consumption for the current day:
+
+```python
+# agents/orchestrator.py
+if settings.USER_DAILY_TOKEN_BUDGET > 0:
+    usage_today = await self.memory.db.get_user_token_usage_today(user_id)
+    if usage_today >= settings.USER_DAILY_TOKEN_BUDGET:
+        return [
+            "You've given me so much to think about today! 🧠✨ "
+            "Let's pause here so I can process everything. "
+            "I'll be refreshed and ready to talk more tomorrow!"
+        ], "😴"
+```
+
+If the threshold is breached, the execution instantly short-circuits. It returns a gracefully formatted rejection message paired with a sleeping emoji (`😴`). No API calls to LiteLLM are made, completely shielding the system from an accidental denial-of-wallet.
+
+### Background Task Offloading
+
+Because tracking exact token consumption per model per user was vital for updating that exact `usage_today` calculation, I log every token spent directly into the database. However, executing this database write-logic sequentially would delay the bot from delivering its response to the Telegram user.
+
+Similarly, every 30 messages, the system aggressively analyzes the chat log and generates two massive internal memories. Because these actions are critical internally but absolutely unessential for the user's perception of response speed, both are utterly offloaded into `asyncio.create_task` shells:
 
 ```python
 # Fired safely AFTER delivering the LLM output back to the Telegram client

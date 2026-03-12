@@ -142,14 +142,16 @@ DiaryEntry (the processed mind)
 └── timestamp
 ```
 
-### Events vs. Traits (Two Memory Systems)
-
 I found that I needed to conceptually differentiate between remembering an *event* and understanding a *trait*. 
 
 1. **`compact_summary` (Events):** This records standard factual history. For example: *"On March 5, they talked about their job interview. They felt nervous but thought they answered the technical questions well."*
 2. **`conversation_memory` (Traits):** This records deeper psychological or behavioral reflections. For example: *"They tend to mask anxiety with dark humor. They care deeply about their career trajectory, even if they pretend they don't."*
 
-By storing both types of records, the agent can reference a past event while also understanding the emotional weight behind it.
+To manage cost and prevent the database from exploding, I tied the generation of both memories strictly to message intervals defined in my environment settings (`COMPACT_INTERVAL` and `MEMORY_ENTRY_INTERVAL`, both defaulting to 30 messages). 
+
+When the chat hits this 30-message integer limit, the orchestration script intercepts the flow and uses `asyncio.create_task` to fire off two parallel, non-blocking background workers. Worker A asks a cheap, fast model (like Haiku) to compress the actual chat log into a `compact_summary`. Worker B feeds that identical chat log into a heavier, smarter model and asks it to psychoanalyze the exchange to produce a `conversation_memory` trait. 
+
+By storing both types of records, the agent can reference a past event while also understanding the emotional weight behind it, without adding a single millisecond of latency to the user's active front-end experience.
 
 ---
 
