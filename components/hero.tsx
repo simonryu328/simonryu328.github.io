@@ -140,13 +140,6 @@ export function Hero() {
         "Is this legal?",
         "I see my house from here!",
         "Look ma, no wings!",
-        "Gravity is just a suggestion.",
-        "Okay, I'm a bird now. Happy?",
-        "Is this what scaling feels like?",
-        "I'm not falling, I'm just deferring landing.",
-        "Wait, did I leave the GPU on?",
-        "Efficiency: 100%.",
-        "Just a little higher...",
     ];
 
     const handleJump = () => {
@@ -222,14 +215,7 @@ export function Hero() {
         "You really like this game...",
         "Fine, but this is the last time!",
         "My legs are getting tired...",
-        "Back for more data points?",
-        "My training didn't cover this many laps.",
-        "Let's see if your latency has improved.",
-        "Are we benchmarking or just playing?",
-        "I'm essentially a mascot, not a marathoner.",
         "You have a lot of free time today.",
-        "One more time, for science.",
-        "Ready for the next iteration?",
     ];
 
     const handleAkiClick = () => {
