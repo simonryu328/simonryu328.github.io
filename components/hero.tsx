@@ -136,7 +136,6 @@ export function Hero() {
     const FLIGHT_MESSAGES = [
         "This is kind of boring...",
         "Didn't you come here for the blog?",
-        "I'm basically a Bird-Aki now.",
         "Wheeeee!",
         "Is this legal?",
         "I see my house from here!",
