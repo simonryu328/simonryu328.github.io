@@ -139,6 +139,13 @@ export function Hero() {
         "Wheeeee!",
         "Is this legal?",
         "I see my house from here!",
+        "Gravity is just a suggestion.",
+        "Look ma, no wings!",
+        "Is this a bug or a feature?",
+        "I'm basically a cloud now.",
+        "Terminal velocity? Never heard of her.",
+        "Sending data to the cloud... literally.",
+        "The view is better from up here.",
     ];
 
     const handleJump = () => {
@@ -215,6 +222,16 @@ export function Hero() {
         "Fine, but this is the last time!",
         "Can't you just read my GitHub?",
         "I need a raise.",
+        "My legs are getting tired...",
+        "Don't you have work to do?",
+        "You're procrastinating, aren't you?",
+        "Score: 100. Ego: +1000.",
+        "I'm starting to think you're obsessed.",
+        "Searching for: how to quit my job...",
+        "Bit-Aki will remember this.",
+        "If I clip a wall, it's on you.",
+        "I'm too refined for this activity.",
+        "Is this what AI safety looks like?",
     ];
 
     const handleAkiClick = () => {
