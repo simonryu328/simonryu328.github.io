@@ -57,7 +57,7 @@ The golden rule here became: **use the cheapest model that consistently clears t
 
 Early on, I tried prompting the LLM with generic instructions like "respond naturally." It was incredibly inconsistent. LLMs, left to their own devices, will often default back to "As an AI..." safety guardrails or adopt an overly formal, robotic tone.
 
-To fix this, I abandoned free-text output and enforced a strict XML schema for every single response. I chose XML over JSON because I found LLMs are far less likely to break XML formatting when generating creative text, and it's easier to regex-parse a missing close-tag than a missing JSON bracket.
+To fix this, I abandoned free-text output and enforced a strict XML schema for every single response. I chose XML over JSON because I found LLMs are far less likely to break XML formatting when generating creative text, and it's infinitely easier to cleanly parse using basic regex tools. 
 
 ```xml
 <?xml version="1.0"?>
@@ -74,17 +74,46 @@ To fix this, I abandoned free-text output and enforced a strict XML schema for e
 </message>
 ```
 
+In the backend, I built a cascading parser. It first looks for the strict `<?xml version="1.0"?>` wrapper. If the model hallucinates and breaks the root tag, it falls back to regex-extracting standalone `<thinking>` and `<response>` blocks. If the model forgets XML entirely, it defaults to breaking the output along standard line breaks or `[BREAK]` tags. This multi-layered parsing ensures the bot never crashes even if the AI output gets messy.
+
+### The Dynamic vs. Static Persona Split
+
+A major revelation was realizing that the *instructions* for how to format the XML and the *personality* of the agent are fundamentally two different things. 
+
+I split my system implementation into two halves: the **System Frame** (the structural scaffolding that demands the `<thinking>` and `<emoji>` blocks) and the **Persona** (a swappable text block that dictates character).
+
+```python
+# system_frame.py
+SYSTEM_STATIC = """
+Your name is Aki. You exist inside the user's phone.
+{persona}
+---
+FORMAT:
+Respond with valid XML. Start with the XML declaration...
+"""
+```
+
+By separating these, the behavior instructions stay perfectly intact while the persona itself can be hot-swapped effortlessly. The persona prompt itself heavily discourages "therapy speak" and explicitly authorizes the LLM to be distracted, dry, or even slightly off. Sometimes the right response really is just *"that's wild"* instead of a five-sentence psychological breakdown.
+
 ### The Thinking Layer
 
 The `<thinking>` block was the single most impactful change to the conversational quality. I realized that the LLM needed a dedicated "warm up" workspace before outputting the visible message. 
 
-When the model is forced to output the final message immediately, it often grasps for the most obvious, generic response. By forcing it to first write a private `<thinking>` block, it gets the space to reason through complex emotional subtext before committing to an answer. It qualitatively improved the agent's empathy. I also log these blocks, which has been invaluable for debugging why the agent hallucinated or reacted poorly.
+When the model is forced to output the final message immediately, it often grasps for the most obvious, generic response. By forcing it to first write a private `<thinking>` block, it gets the space to reason through complex emotional subtext before committing to an answer. It qualitatively improved the agent's empathy. By saving these `<thinking>` blocks into the PostgreSQL memory database right next to the message, it becomes trivial to debug why the agent hallucinated or reacted poorly from the dashboard.
+
+### The Reaction & Sticker Engine
+
+You'll notice an `<emoji>` block in the XML schema above. I built a dedicated engine strictly for Telegram reactions and stickers to make the agent feel less sterile and robotic.
+
+Instead of sending the LLM's chosen emoji as standard text padding, my backend intercepts it. If the emoji matches a predefined set of native Telegram reactions (like 👍, 🔥, or 🤯), the API directly applies it to the user's previous message bubble. 
+
+Even better, I built a sticker translation system. The LLM has no idea what a Telegram sticker pack is, but it knows how to use basic Unicode emojis. I created a `stickers.json` registry that maps hundreds of generic emojis to specific Telegram Sticker File IDs. If the LLM generates 😭, the engine randomly picks from an array of hand-picked crying meme stickers and fires it off using native Telegram payload syntax. To prevent this from becoming overwhelming, these sticker interactions are gated behind randomized counters—the bot might react on message #3, but wait until message #8 to drop a sticker.
 
 ### Time Context Injection
 
 A jarring flaw in many chatbots is time-blindness. If you say "I'm going to sleep," and the bot doesn't know it's 3:00 AM your time, its response will feel hollow. 
 
-Every system prompt I generate injects the user's localized time of day. I store the user's IANA timezone upon registration and convert all timestamps in the prompt to their local time. "It's 2am" and "It's 10am" drastically alter how the agent interprets the same message.
+Every system prompt I generate injects the user's localized time of day. I store the user's IANA timezone upon registration (e.g. `America/New_York`) and convert all UTC timestamps in the prompt to their local variant using `pytz`. Furthermore, the LLM uses `dateparser` internally any time it tries to schedule a reminder or proactive reach-out, ensuring "tomorrow morning" means *their* morning.
 
 ---
 

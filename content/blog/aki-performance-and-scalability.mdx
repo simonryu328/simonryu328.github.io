@@ -79,6 +79,24 @@ self.engine = create_async_engine(
 
 The database pool easily manages 30 concurrent user transactions before `uvicorn` ever begins queuing requests, allowing a single lightweight process server on Railway to manage the traffic seamlessly.
 
+### In-Memory User Caching with TTLCache
+
+One of the most frequent database queries is fetching the user's settings profile (their exact timezone, configurations, and name). Hitting the PostgreSQL pool for this static data on every single API request is wasteful.
+
+I implemented `TTLCache` from the `cachetools` library directly in the async memory manager to hold this data completely in RAM.
+
+```python
+from cachetools import TTLCache
+
+class AsyncMemoryManager:
+    def __init__(self):
+        self.db = db
+        # In-memory caches (maxsize 100 users, 5-minute TTL)
+        self._user_cache = TTLCache(maxsize=100, ttl=300)
+```
+
+Because conversations often occur in bursts (e.g., 20 texts back and forth over 3 minutes, then silence for hours), the 5-minute TTL (Time-To-Live) completely neutralizes database roundtrips during an active chat session. The database is queried exactly once when the conversation starts, and the cache absorbs all subsequent state lookups.
+
 ### Rate Limiting the Sliding Window
 
 Because LLM inferences are infinitely more expensive than traditional database operations, allowing unbounded requests translates instantly to a skyrocketed bill. I needed rate limiting directly integrated into the routing logic—but without relying on Redis, which would simply add another network hop.
