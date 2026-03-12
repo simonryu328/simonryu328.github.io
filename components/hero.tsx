@@ -2,8 +2,9 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { PixelAki } from "./pixel-aki";
+import { PixelDecor, type DecorType } from "./pixel-decor";
 
 export function Hero() {
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -26,6 +27,10 @@ export function Hero() {
     const [gameSessionCount, setGameSessionCount] = useState(0);
     const [flightSessionCount, setFlightSessionCount] = useState(0);
     const [dynamicMessage, setDynamicMessage] = useState("");
+    const [decorPos, setDecorPos] = useState({
+        clouds: [100, 300, 500],
+        ground: [50, 250, 450]
+    });
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -129,6 +134,28 @@ export function Hero() {
 
         return () => clearInterval(gameLoop);
     }, [gameActive, gameOver, isJumping, obstacles.length]);
+    // Background Parallax Engine
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setDecorPos(prev => ({
+                clouds: prev.clouds.map(x => (x < -200 ? 600 : x - (gameActive ? 0.5 : 0.1))),
+                ground: prev.ground.map(x => (x < -200 ? 600 : x - (gameActive ? 2 : 0.2)))
+            }));
+        }, 30);
+        return () => clearInterval(interval);
+    }, [gameActive]);
+
+    const groundDecors = useMemo(() => [
+        { type: "tree" as const, xIdx: 0, size: 40, offset: 0 },
+        { type: "bush" as const, xIdx: 1, size: 24, offset: 8 },
+        { type: "tree" as const, xIdx: 2, size: 48, offset: 0 },
+    ], []);
+
+    const cloudDecors = useMemo(() => [
+        { type: "cloud1" as const, xIdx: 0, size: 60, y: 10 },
+        { type: "cloud2" as const, xIdx: 1, size: 80, y: 5 },
+        { type: "cloud1" as const, xIdx: 2, size: 50, y: 15 },
+    ], []);
 
     const [flightDialogue, setFlightDialogue] = useState("");
     const [lastJumpTime, setLastJumpTime] = useState(0);
@@ -340,6 +367,36 @@ export function Hero() {
                         animate={gameActive ? { width: "100%", maxWidth: "600px" } : { width: "100%", maxWidth: "400px" }}
                         className="relative h-full flex items-end justify-center border-b border-neutral-100 dark:border-neutral-900/50"
                     >
+                        {/* Background Decor */}
+                        <div className="absolute inset-x-0 bottom-0 top-0 overflow-hidden pointer-events-none">
+                            {/* Clouds */}
+                            {cloudDecors.map((d, i) => (
+                                <div
+                                    key={`cloud-${i}`}
+                                    className="absolute"
+                                    style={{
+                                        left: decorPos.clouds[d.xIdx],
+                                        top: `${d.y}%`
+                                    }}
+                                >
+                                    <PixelDecor type={d.type} size={d.size} opacity={0.2} className="text-neutral-400 dark:text-neutral-600" />
+                                </div>
+                            ))}
+                            {/* Trees & Bushes */}
+                            {groundDecors.map((d, i) => (
+                                <div
+                                    key={`ground-${i}`}
+                                    className="absolute bottom-0"
+                                    style={{
+                                        left: decorPos.ground[d.xIdx],
+                                        marginBottom: `${d.offset}px`
+                                    }}
+                                >
+                                    <PixelDecor type={d.type} size={d.size} opacity={0.3} className="text-neutral-300 dark:text-neutral-700" />
+                                </div>
+                            ))}
+                        </div>
+
                         {/* Game UI Overlay */}
                         <AnimatePresence>
                             {gameActive && (
