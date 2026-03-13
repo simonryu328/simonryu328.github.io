@@ -1,0 +1,55 @@
+---
+title: "Technical Reflections: Deep Research with LangGraph and Tavily"
+date: 2025-09-15
+categories: [AI, ML]
+tags: [Deep Research, LangGraph, Tavily, OpenAI, LangSmith]
+image:
+  path: /images/projects/assistant_ui.gif
+  alt: "Deep Research Agent Assistant UI"
+---
+
+This document outlines technical reflections on building deep research agents using LangGraph and the Tavily API. Rather than focusing on a specific final architecture, these notes cover the experience of using these frameworks to accelerate prototyping and implement evaluation-driven development.
+
+## Prototyping and the Role of Wrappers
+
+LangGraph and LangChain function as orchestration wrappers that significantly reduce the initial friction of building complex LLM workflows. In this project, they allowed for rapid experimentation with iterative research loops.
+
+### Acceleration of Prototyping
+The primary benefit of using LangGraph in this context was the ability to define stateful cycles without writing custom state management boilerplate. By defining nodes for scoping, research execution, and synthesis, I was able to stand up a functional research agent within a single day. 
+
+However, there are nuances to using these wrappers. While they simplify the high-level logic, they introduce a layer of abstraction that can make fine-grained control difficult. Understanding how the recursion limits and checkpointers actually interact with the underlying LLM calls is a prerequisite for moving beyond a basic prototype.
+
+### Tavily API Integration
+Tavily was used as the primary interface for web access. The integration moved beyond simple keyword search to include the Map and Extract APIs. 
+
+Integrating these tools highlighted a specific challenge: tool selection reasoning. Using the Search API to find domains and then the Map API to understand their internal structure requires the agent to maintain a high level of situational awareness. If the wrapper doesn't expose the raw tool outputs clearly, the agent's ability to pivot its strategy based on new information is diminished.
+
+## Transitioning to Evaluation-Driven Development
+
+The most valuable aspect of using this stack was the transition from "guess-and-check" prompting to a more formal evaluation framework enabled by LangSmith.
+
+### LangSmith and Trace Visibility
+Building agentic loops is inherently non-deterministic. Traces provide the essential visibility required to debug why an agent abandoned a useful search path or mismanaged its context.
+
+![LangGraph Main Trace](/images/projects/main-trace.png)
+*Trace analysis in LangSmith.*
+
+Visibility into specific node executions allowed for an iterative approach to prompt engineering. By observing where the model failed to follow tool-calling constraints, I could refine the system prompts with much higher precision than through standard logging.
+
+### Test-Driven Development for Agents
+I used LangSmith to implement a guide for evaluation-based development. Specifically, I built a dataset to test the agent's termination logic.
+
+1.  **Defining the Dataset**: I created scenarios where search results were either complete or intentionally missing data points.
+2.  **LLM-as-a-Judge**: A separate evaluator judged the agent's decision to stop or continue.
+3.  **Iteration**: This process revealed that original standard prompts scored roughly 53% on strategic intent, while refined prompts that focused on uncertainty mapping and constraint identification reached 92%.
+
+![Evaluation Trace](/images/projects/claude-trace.png)
+*Node-level evaluation for stopping judgment.*
+
+## Technical Nuances and Lessons
+
+- **Abstraction Overhead**: Wrappers help in the beginning, but they can hide critical failure points. Success depends on knowing when to step outside the wrapper's defaults.
+- **State Structure**: Designing the state is the most important part of LangGraph development. For deep research, keeping message history separate from extracted findings and source lists is necessary to prevent context overflow.
+- **Evaluation is Not Optional**: Prototyping is fast with LangGraph, but making an agent reliable is slow. The only way to compress that timeline is through automated evaluation and rigorous trace auditing.
+
+> Repository: [tavily_deep_research](https://github.com/simonryu328/tavily_deep_research)

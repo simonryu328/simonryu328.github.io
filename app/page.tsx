@@ -10,20 +10,31 @@ export default function Home() {
 
   const featuredProjects: Project[] = [
     {
-      title: "Aki - AI Companion",
-      description: "A production Telegram bot with persistent memory, personality-driven conversations, and RAG capabilities.",
+      title: "Telegram AI Companion",
+      description: "A proactive Telegram bot featuring a built-in Mini App (Web App), persistent memory, and personality-driven conversations.",
       link: "/blog/building-ai-companion-telegram",
-      image: "/images/projects/aki-icon.png",
+      image: "/images/projects/demo_mini_app.gif",
       github: "https://github.com/simonryu328/aki-the-bot",
-      tags: ["Python", "OpenAI", "FastAPI", "PostgreSQL"],
+      tags: ["Python", "OpenAI", "Mini App", "PostgreSQL"],
+      variant: "featured",
+      orientation: "vertical",
     },
     {
-      title: "Autonomous CV Pipeline",
-      description: "Real-time object detection and tracking system using CNNs for vehicle navigation.",
-      link: "/blog/enph-353-cnn",
-      image: "/images/projects/cv-icon.png",
-      github: "https://github.com/simonryu328/License-Plate-Reader",
-      tags: ["PyTorch", "OpenCV", "CNN", "Python"],
+      title: "Deep Research Agent",
+      description: "An autonomous research agent built with LangGraph and Tavily that explores and synthesizes information.",
+      link: "/blog/tavily-deep-research",
+      image: "/images/projects/assistant_ui.gif",
+      github: "https://github.com/simonryu328/tavily_deep_research",
+      tags: ["LangGraph", "Tavily", "OpenAI", "React"],
+      variant: "featured",
+    },
+    {
+      title: "Latent Video Diffusion",
+      description: "A high-performance latent video diffusion transformer implementation written in JAX.",
+      link: "/blog/latent-video-diffusion",
+      image: "/images/projects/video-diffusion.png",
+      github: "https://github.com/simonryu328/latent-video-diffusion",
+      tags: ["JAX", "Diffusion", "Transformer", "ML"],
     },
     {
       title: "AI Golf Swing Analysis",
@@ -31,26 +42,34 @@ export default function Home() {
       link: "/blog/swing-analysis",
       image: "/images/projects/golf-icon.png",
       github: "https://github.com/simonryu328/Golf-Swing-Extractor",
-      tags: ["MediaPipe", "Computer Vision", "React"],
+      tags: ["PyTorch", "OpenCV", "ML", "Python"],
     },
     {
-      title: "AR Dynamic Menu",
+      title: "Augmented Reality Menu",
       description: "Interactive augmented reality menu for restaurants using spatial computing concepts.",
       link: "/blog/ar-menu",
       image: "/images/projects/ar-icon.png",
       github: "https://github.com/simonryu328/ar-menu-unity",
       tags: ["ARKit", "Unity", "C#"],
+    },
+    {
+      title: "Self-Driving and CNN",
+      description: "Real-time object detection and tracking system using CNNs for vehicle navigation.",
+      link: "/blog/enph-353-cnn",
+      image: "/images/projects/cv-icon.png",
+      github: "https://github.com/simonryu328/License-Plate-Reader",
+      tags: ["PyTorch", "OpenCV", "CNN", "Python"],
     }
   ];
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-16">
+    <div className="max-w-4xl mx-auto px-4 py-16">
       <Hero />
 
       {/* Projects */}
       <section className="mb-20">
         <h2 className="text-xl font-semibold mb-6">Featured Projects</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {featuredProjects.map((project) => (
             <ProjectCard key={project.title} project={project} />
           ))}
@@ -60,7 +79,7 @@ export default function Home() {
       {/* Recent Posts */}
       <section>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold">Writing</h2>
+          <h2 className="text-xl font-semibold">Blog</h2>
           <Link
             href="/blog"
             className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"

@@ -118,7 +118,29 @@ To balance this and prevent the bot from reacting to *every single message* (whi
 
 Furthermore, I invoke Telegram's typing indicator API before every single message bubble is sent. The duration of the typing status scales proportionally with the character count of the incoming bubble (e.g. `min(1.0 + len(text) * 0.05, 30.0)` seconds). 
 
-However, there's a technical catch: the Telegram Bot API automatically expires a typing indicator after roughly 5 seconds. If the AI takes 8 seconds to generate and send a long thought, the typing indicator drops halfway through, breaking the illusion. To counter this, I engineered an async `while` loop that fires a fresh `send_chat_action(ChatAction.TYPING)` packet every 4 seconds until the simulated typing duration fully elapses. It’s a tiny operational detail, but it singlehandedly sells the illusion of physical, uninterrupted presence.
+### Exploiting the Telegram Bot SDK
+
+Typing indicators and emojis are just scratching the surface. The standard text-in, text-out chatbot model is inherently limiting. The Telegram Bot SDK provides a rich set of native tools that allow a bot to act much more like a human operating a smartphone. 
+
+For instance, consider how friction-heavy text commands are. If you want a user to confirm an action, forcing them to type "yes" or "no" breaks the conversational flow. Instead, the SDK supports `InlineKeyboardMarkup`. I engineered Aki's settings dialogues so that when it asks a procedural question (e.g., "Are you okay with me texting you first sometimes?"), it attaches inline `[Yes]` and `[No]` buttons directly beneath the message bubble. 
+
+```python
+# snippet of the inline keyboard routing
+keyboard = [
+    [InlineKeyboardButton("Yeah, that's fine", callback_data="reachout_enable")],
+    [InlineKeyboardButton("No, I'll text you first", callback_data="reachout_disable")]
+]
+await update.message.reply_text(
+    "Would you like me to check in on you occasionally?", 
+    reply_markup=InlineKeyboardMarkup(keyboard)
+)
+```
+
+When the user taps a button, a silent `CallbackQuery` is fired to the FastAPI server in the background. The bot instantly answers the query and gracefully edits its original message text to reflect the choice, effectively turning the chat history into an interactive UI rather than a static log.
+
+Furthermore, the Bot SDK natively supports structured media. A truly convincing Turing test isn't just about text; it's about multimedia communication. If Aki needs to suggest a location, it doesn't send a Google Maps link—it sends a native Telegram Location object. If it needs to prove it "listened" to a Spotify track, it can send an Audio file wrapper. 
+
+By mapping the LLM's intent to these native Telegram objects rather than forcing everything into string output, the agent begins to behave less like a terminal script and more like a fully-featured chat client. This level of tight API integration is what transforms a "wrapper" into a companion.
 
 ---
 
@@ -126,7 +148,9 @@ However, there's a technical catch: the Telegram Bot API automatically expires a
 
 An LLM entirely contained inside a chat UI is just a conversationalist; it doesn't have a definitive "life" outside the text box. I wanted the agent to feel like it had a persistent existence.
 
-To fix this, I built a Telegram Mini App that lives seamlessly alongside the bot chat. A Mini App is fundamentally a web application rendered directly inside Telegram's native WebView, so the user never has to download an external app or open Safari. 
+I got the idea after trying out [`@durgerkingbot`](https://t.me/durgerkingbot), which is Telegram's official showcase for their WebApp capabilities. It blew my mind: hitting the "Order Food" button perfectly transitions the chat interface into a fully responsive, native-feeling Fast Food catalog, complete with animations, a shopping cart, and a smooth UI checkout flow. It proved that Telegram isn't just a messaging platform; it's a lightweight operating system that hosts full HTML5 web applications directly within the chat window. 
+
+To fix the "stateless chat" problem, I built my own Telegram Mini App that lives seamlessly alongside the bot chat. By utilizing the Telegram WebApp SDK, the bot can spin up a complex React frontend without forcing the user to install a separate app, open Safari, or authenticate (the SDK automatically injects secure Telegram user data into the web app's context).
 
 The Mini App serves as the interface for the relationship. I split the UI into three specific panels, representing the timeline of the partnership:
 
@@ -162,6 +186,34 @@ async def get_dashboard(telegram_id: int):
 ```
 
 The catch is that the Mini App's content is inextricably linked to the chat interaction. If you don't talk to the bot, the journals don't update, the daily playlist algorithms stall, and the Mini App effectively "dies." The UI exists solely to fuel the conversation, and the conversation gives the UI purpose.
+
+---
+
+## Handling Costs: The Bot Payments API
+
+As an AI agent becomes more proactive and capable—generating journals, running asynchronous crons, and parsing daily context—the underlying LLM token costs invariably scale. Traditional web apps handle this by gating premium features behind Stripe subscriptions. But breaking a user out of a Telegram chat to type their credit card directly into a Safari web page completely ruins the immersive experience of a personal companion.
+
+Telegram solves this elegantly with their native Bot Payments API. It acts as a secure intermediary. For physical goods, it integrates directly with massive payment providers like Stripe, Apple Pay, Google Pay, and PayPal across 200+ countries, without Telegram taking any commission on the transaction. The user's credit card data is securely tokenized and sent straight to the provider; the backend simply receives a `SuccessfulPayment` confirmation webhook.
+
+However, for digital goods (like LLM token refills or premium software features), Apple and Google's strict App Store policies historically blocked native in-app processing for bots. To bypass this friction, Telegram introduced "Telegram Stars"—an in-app virtual currency that users can casually purchase through their phone's native IAP flow.
+
+This fundamentally shifts the monetization paradigm for personal AI agents. If Aki runs low on its allocated weekly API budget, it doesn't need to send a jarring link to a generic billing portal. Instead, the backend can issue a native `sendInvoice` command. 
+
+```python
+await bot.send_invoice(
+    chat_id=user_id,
+    title="Memory Expansion",
+    description="Refill Aki's processing tokens for another week.",
+    payload="token_refill_tier_1",
+    provider_token="",  # Empty for Telegram Stars
+    currency="XTR",     # XTR is the currency code for Stars
+    prices=[LabeledPrice("10,000 Tokens", 50)] # 50 Stars
+)
+```
+
+This renders a native, beautiful Telegram Invoice directly in the chat history. The user taps "Pay 50 Stars," and the webhook immediately captures the `SuccessfulPayment` payload, triggering the database to silently top up their token balance. 
+
+By keeping the transaction inside the chat environment, the friction drops to near zero, making the "business" of operating the AI completely seamless with the actual interaction. 
 
 ---
 

@@ -335,7 +335,7 @@ export function Hero() {
                 </div>
 
                 <p className="text-lg sm:text-xl text-neutral-600 dark:text-neutral-400 leading-relaxed max-w-xl">
-                    AI Engineer at IBM. Engineering Physics grad. I build production AI systems for Fortune 500 clients by day — and ship my own at night. AI companion bots, computer vision pipelines, agents that actually work.
+                    AI Engineer based in Toronto. Background in engineering physics. I work across vision, agents, and production systems.
                 </p>
 
                 <div className="flex flex-wrap gap-4 mt-8">
