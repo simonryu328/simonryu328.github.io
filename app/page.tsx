@@ -19,7 +19,7 @@ export default function Home() {
       telegram: "https://t.me/AkiTheBot",
       externalLink: "https://aki-landing.vercel.app",
       additionalInfo: "Aki is live and processing real-time conversations! Experience human-like cadence, native reactions, and a persistent memory that builds over time.",
-      tags: ["Python", "OpenAI", "Mini App", "PostgreSQL"],
+      tags: ["Python", "LLM", "FastAPI", "Agent"],
       variant: "featured",
       orientation: "vertical",
     },

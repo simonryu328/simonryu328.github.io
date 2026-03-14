@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export interface Project {
     title: string;
     description: string;
@@ -18,7 +20,7 @@ export function ProjectCard({ project }: { project: Project }) {
     const isVertical = project.orientation === "vertical";
 
     return (
-        <div className={`group relative rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-300 overflow-hidden ${isFeatured ? "sm:col-span-2" : ""}`}>
+        <div className={`group relative rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-300 overflow-hidden cursor-pointer ${isFeatured ? "sm:col-span-2" : ""}`}>
             {/* Action Links */}
             <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
                 {project.telegram && (
@@ -47,18 +49,14 @@ export function ProjectCard({ project }: { project: Project }) {
                         </svg>
                     </a>
                 )}
-                <a
-                    href={project.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 rounded-full bg-white/10 backdrop-blur-md text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors border border-white/10"
-                    aria-label="Live Demo"
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                    </svg>
-                </a>
             </div>
+
+            {/* Main Link Overlay */}
+            <Link 
+                href={project.link}
+                className="absolute inset-0 z-10"
+                aria-label={`View ${project.title}`}
+            />
 
             <div className={`flex h-full ${isFeatured ? (isVertical ? "flex-col md:flex-row" : "flex-col") : "flex-col"}`}>
                 {/* Project Media */}
@@ -119,7 +117,7 @@ export function ProjectCard({ project }: { project: Project }) {
                             href={project.externalLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="group/site relative mb-6 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 block shadow-sm hover:shadow-md transition-all duration-300"
+                            className="group/site relative z-20 mb-6 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 block shadow-sm hover:shadow-md transition-all duration-300"
                         >
                             {/* Browser Header */}
                             <div className="flex items-center gap-1.5 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800">
