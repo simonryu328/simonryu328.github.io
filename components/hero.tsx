@@ -386,7 +386,7 @@ export function Hero() {
                                         top: `${d.y}%`
                                     }}
                                 >
-                                    <PixelDecor type={d.type} size={d.size} opacity={0.2} className="text-neutral-400 dark:text-neutral-600" />
+                                    <PixelDecor type={d.type} size={d.size} opacity={0.5} className="text-neutral-300 dark:text-neutral-700" />
                                 </div>
                             ))}
                             {/* Trees & Bushes */}
@@ -399,7 +399,7 @@ export function Hero() {
                                         marginBottom: `${d.offset}px`
                                     }}
                                 >
-                                    <PixelDecor type={d.type} size={d.size} opacity={0.3} className="text-neutral-300 dark:text-neutral-700" />
+                                    <PixelDecor type={d.type} size={d.size} opacity={0.6} className="text-neutral-300 dark:text-neutral-700" />
                                 </div>
                             ))}
                         </div>

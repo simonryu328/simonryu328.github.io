@@ -71,14 +71,13 @@ export function PixelDecor({
             width={size}
             height={(size / width) * height}
             viewBox={`0 0 ${width} ${height}`}
-            className={className}
+            className={`fill-current ${className}`}
             style={{ opacity }}
             aria-label={`Pixel ${type}`}
         >
             {grid.map((row, y) => (
                 row.split("").map((char, x) => {
-                    const colorClass = getPixelColor(char);
-                    if (!colorClass) return null;
+                    if (char !== "X") return null;
                     return (
                         <rect
                             key={`${x}-${y}`}
@@ -86,7 +85,6 @@ export function PixelDecor({
                             y={y}
                             width="1"
                             height="1"
-                            className={`fill-current ${colorClass}`}
                             shapeRendering="crispEdges"
                         />
                     );
