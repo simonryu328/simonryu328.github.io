@@ -94,6 +94,12 @@ export function ProjectCard({ project }: { project: Project }) {
                         <h3 className={`${isFeatured ? "text-xl sm:text-2xl" : "text-sm"} font-semibold text-neutral-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors`}>
                             {project.title}
                         </h3>
+                        {isFeatured && isVertical && (
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                            </span>
+                        )}
                     </div>
                     
                     <p className={`${isFeatured ? "text-sm sm:text-base leading-relaxed" : "text-xs"} text-neutral-600 dark:text-neutral-400 mb-6 flex-grow max-w-xl`}>
