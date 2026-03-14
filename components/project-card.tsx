@@ -5,6 +5,9 @@ export interface Project {
     image: string;
     github?: string;
     tags: string[];
+    secondaryImage?: string;
+    externalLink?: string;
+    additionalInfo?: string;
     variant?: "featured" | "standard";
     orientation?: "vertical" | "horizontal";
 }
@@ -14,7 +17,7 @@ export function ProjectCard({ project }: { project: Project }) {
     const isVertical = project.orientation === "vertical";
 
     return (
-        <div className={`group relative rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-300 overflow-hidden`}>
+        <div className={`group relative rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-300 overflow-hidden ${isFeatured ? "sm:col-span-2" : ""}`}>
             {/* Action Links */}
             <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
                 {project.github && (
@@ -43,42 +46,111 @@ export function ProjectCard({ project }: { project: Project }) {
                 </a>
             </div>
 
-            <div className={`flex flex-col h-full ${isFeatured ? "" : "p-4"}`}>
+            <div className={`flex h-full ${isFeatured ? (isVertical ? "flex-col md:flex-row" : "flex-col") : "flex-col p-4"}`}>
                 {/* Project Media */}
-                <div className={`relative overflow-hidden bg-neutral-50 dark:bg-neutral-900/80 flex items-center justify-center border-neutral-200 dark:border-neutral-800 shrink-0 ${isFeatured
-                    ? "aspect-[16/9] w-full border-b"
+                <div className={`relative overflow-hidden bg-neutral-100/80 dark:bg-neutral-800/50 flex items-center justify-center border-neutral-200 dark:border-neutral-800 shrink-0 ${isFeatured
+                    ? isVertical
+                        ? "md:w-[350px] aspect-[4/5] md:aspect-auto md:border-r border-b md:border-b-0"
+                        : "aspect-[16/9] w-full border-b"
                     : "w-12 h-12 mb-4 rounded-lg border"
                     }`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src={project.image}
-                        alt={project.title}
-                        className={`transition-transform duration-500 group-hover:scale-105 ${isFeatured
-                            ? isVertical
-                                ? "h-[85%] w-auto object-contain py-4 rounded-xl shadow-sm border border-neutral-200/50 dark:border-neutral-700/50"
-                                : "w-full h-full object-cover"
-                            : "w-full h-full object-cover"
-                            }`}
-                    />
-                    {isFeatured && (
-                        <div className="absolute inset-0 bg-gradient-to-t from-neutral-200/20 dark:from-neutral-900/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                    {isVertical && isFeatured ? (
+                        <div className="relative h-[85%] aspect-[9/19.5] group-hover:scale-[1.05] transition-transform duration-700 ease-out">
+                            {/* Phone Frame Bezel with Heavy Depth */}
+                            <div className="absolute -inset-[3px] rounded-[2.5rem] border-[3px] border-neutral-800 dark:border-neutral-700 bg-neutral-900 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] dark:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)]" />
+                            
+                            {/* The Screen */}
+                            <div className="relative h-full w-full rounded-[2.2rem] overflow-hidden bg-black border border-neutral-800/50">
+                                {/* Notch / Dynamic Island */}
+                                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-4 bg-neutral-900 rounded-full z-10 hidden md:block border border-white/5" />
+                                
+                                <img
+                                    src={project.image}
+                                    alt={project.title}
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src={project.image}
+                                alt={project.title}
+                                className={`transition-transform duration-500 group-hover:scale-105 ${isFeatured
+                                    ? "w-full h-full object-cover"
+                                    : "w-full h-full object-cover"
+                                    }`}
+                            />
+                            {isFeatured && (
+                                <div className="absolute inset-0 bg-gradient-to-t from-neutral-200/20 dark:from-neutral-900/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                            )}
+                        </>
                     )}
                 </div>
 
-                <div className={`flex flex-col flex-grow p-4 ${isFeatured ? "sm:p-6" : ""}`}>
-                    <div className="mb-2">
-                        <h3 className={`${isFeatured ? "text-lg sm:text-xl" : "text-sm"} font-semibold text-neutral-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors`}>
+                <div className={`flex flex-col flex-grow p-5 sm:p-7 ${isVertical && isFeatured ? "md:justify-center" : ""}`}>
+                    <div className="flex items-center gap-3 mb-3">
+                        <h3 className={`${isFeatured ? "text-xl sm:text-2xl" : "text-sm"} font-semibold text-neutral-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors`}>
                             {project.title}
                         </h3>
+                        {isFeatured && isVertical && (
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                            </span>
+                        )}
                     </div>
+                    
                     <p className={`${isFeatured ? "text-sm sm:text-base leading-relaxed" : "text-xs"} text-neutral-600 dark:text-neutral-400 mb-6 flex-grow max-w-xl`}>
                         {project.description}
                     </p>
+
+                    {isFeatured && project.secondaryImage && project.externalLink && (
+                        <a 
+                            href={project.externalLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group/site relative mb-6 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 block shadow-sm hover:shadow-md transition-all duration-300"
+                        >
+                            {/* Browser Header */}
+                            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800">
+                                <div className="flex gap-1">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-400/50" />
+                                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-400/50" />
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-400/50" />
+                                </div>
+                                <div className="ml-2 text-[10px] font-mono text-neutral-400 truncate max-w-[120px] sm:max-w-none">
+                                    {project.externalLink.replace("https://", "")}
+                                </div>
+                                <div className="ml-auto text-blue-500 text-[10px] font-semibold flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover/site:opacity-100 transition-opacity">
+                                    <span className="hidden sm:inline">Visit Site</span> <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
+                                </div>
+                            </div>
+                            {/* Site Preview Image */}
+                            <div className="aspect-[16/8] md:aspect-[16/12] overflow-hidden grayscale-[30%] group-hover/site:grayscale-0 transition-all duration-500">
+                                <img 
+                                    src={project.secondaryImage} 
+                                    alt="Website Preview" 
+                                    className="w-full h-full object-cover object-top scale-100 group-hover/site:scale-110 transition-transform duration-700"
+                                />
+                            </div>
+                        </a>
+                    )}
+
+                    {isFeatured && project.additionalInfo && (
+                        <div className="mb-8 p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 backdrop-blur-sm">
+                            <p className="text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
+                                {project.additionalInfo}
+                            </p>
+                        </div>
+                    )}
+
                     <div className="flex flex-wrap gap-1.5 mt-auto">
                         {project.tags.map((tag) => (
                             <span
                                 key={tag}
-                                className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400/70 transition-colors group-hover:bg-neutral-200 dark:group-hover:bg-neutral-700"
+                                className="text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400/80 transition-colors group-hover:bg-neutral-200 dark:group-hover:bg-neutral-700"
                             >
                                 {tag}
                             </span>

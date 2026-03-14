@@ -1,20 +1,175 @@
 ---
-title: "Latent Video Diffusion: Generative Modeling with JAX"
-date: 2024-04-12
-categories: [Machine Learning, AI]
-tags: [JAX, Diffusion, Transformer, Video Generation, ML]
-image:
-  path: /images/projects/video-diffusion.png
-  alt: "Glassmorphism icon of a film reel representing video diffusion"
+title: "Latent Video Diffusion: Building an Open-Source Text-to-Video Model"
+date: 2024-04-18
+categories: [ML, Video Generation, Diffusion Models, JAX]
+tags: [ML, Video Generation, Diffusion Models, JAX, VAE, TPU]
 ---
 
-A high-performance latent video diffusion transformer implementation written in JAX.
+**GitHub Repository:** [latent-video-diffusion](https://github.com/simonryu328/latent-video-diffusion)
 
-This project implements a state-of-the-art latent video diffusion model, leveraging the power of **JAX** for high-performance training and sampling. By operating in the latent space, the model efficiently generates high-quality video sequences while maintaining manageable computational requirements.
+## 1. Executive Summary
 
-### Technical Highlights
-- **Transformer-based Architecture**: Utilizes a diffusion transformer (DiT) backbone for scalable video generation.
-- **JAX Implementation**: Written from the ground up in JAX to take advantage of XLA compilation and efficient TPU/GPU utilization.
-- **Latent Space Modeling**: Processes compressed representations of video to focus on semantic content rather than pixel-level redundancy.
+Generative AI models have revolutionized various domains, including text, image, music, and video. However, the dominance of proprietary and closed-source models poses challenges to accessibility, transparency, and innovation in the field. 
 
-> The source code is available on GitHub [here](https://github.com/simonryu328/latent-video-diffusion).
+To address this, our team developed an open-source text-to-video diffusion model, sponsored by Curtis Huebner, Head of Alignment at EleutherAI. We implemented a latent diffusion model for video generation, integrating Variational Autoencoders (VAE) with diffusion models. This architectural choice combines the efficient encoding and latent space learning of VAEs with the high-fidelity generation capabilities of diffusion models.
+
+While training these models at a large scale is extremely expensive, our project focuses on small-scale experiments. The primary objective is to optimize the pipeline and demonstrate the scalability of the model for future large-scale training runs. The code, datasets, and model weights are fully open-sourced to foster transparency, collaboration, and the ethical use of AI technologies in the broader research community.
+
+---
+
+## 2. Introduction & Project Background
+
+### Applications of Generative AI
+Generative AI models learn the underlying patterns of a dataset to generate novel samples that resemble the original data. Driven by breakthroughs in architectures like GANs, VAEs, and diffusion models, Generative AI has found applications across domains such as healthcare (medical image analysis, drug discovery), education, and creative arts. 
+
+Despite these advancements, leading models from companies like OpenAI and DeepMind are often inaccessible to researchers. This closed-source nature hinders collaboration and limits opportunities. Efforts to promote open-source alternatives are crucial to ensure equitable access and ethical AI development.
+
+### About our Sponsor
+The project is sponsored by Curtis Huebner, Head of Alignment at EleutherAI. EleutherAI is a non-profit research institute focused on the interpretability and alignment of large AI models. Their goals include advancing research on foundation models, ensuring equitable access, and educating the public about AI risks and capabilities. EleutherAI's ambition is to develop an open-source text-to-video generation model that is on par with current proprietary benchmarks.
+
+### Project Objectives and Scope
+Given the immense complexity of building a state-of-the-art video generation model, our key objectives included:
+- **Data Acquisition:** Sourcing high-quality video datasets while navigating licensing issues.
+- **Optimization:** Exploring optimization techniques to enhance model efficiency, which leads to substantial cost savings at scale.
+- **Controllability:** Addressing the scarcity of labeled text-to-video data by exploring alternative, data-efficient training methods.
+- **Scaling:** Scaling the codebase to handle larger datasets and complex models once effective architectures are established.
+
+To streamline the project, we limited the scope to **unconditioned video generation** initially. This allowed us to prioritize model development, dataset preparation, training optimization, and parallelization.
+
+---
+
+## 3. High-Level Model Overview
+
+![An overview of our full text-to-video generative model](/images/blog/latent-video-diffusion/figure-1-overview.png)
+
+Our architecture leverages a combination of a Variational Autoencoder (VAE) and a Diffusion Transformer to achieve controllable video synthesis.
+
+
+### Variational Autoencoder (VAE)
+
+![Functional overview of a VAE auto-encoder](/images/blog/latent-video-diffusion/figure-2-vae.png)
+
+The VAE serves as the foundational component for learning the latent space representation of video sequences. 
+- **Encoder:** Takes input video frames and maps them to a compressed representation in the latent space.
+- **Decoder:** Reconstructs the original video frames from the latent space. 
+By minimizing the reconstruction error, the VAE learns to capture the underlying structure and dynamics of the input data.
+
+### Diffusion Transformer
+
+![Transformer model architecture](/images/blog/latent-video-diffusion/figure-4-transformer.png)
+
+The diffusion transformer generates video sequences from the latent representations. It introduces a diffusion process where noise is iteratively added and removed to stabilize the generation process and improve sample quality. By replacing standard U-Net architectures with a transformer, we incorporate self-attention mechanisms to capture long-range dependencies across video frames, facilitating accurate and coherent video synthesis.
+
+### Integration (Latent Diffusion)
+
+![System overview](/images/blog/latent-video-diffusion/figure-6-system.png)
+
+The VAE and diffusion transformer are integrated into a unified architecture. The VAE compresses the input images into a latent representation. The diffusion model is then trained on this compressed latent space. Finally, its output is decoded back into the original video space using the VAE's decoder. Training in the latent space offers significant computational advantages over training on raw uncompressed pixels, resulting in faster training times and the ability to scale to larger models.
+
+---
+
+## 4. Design and Methodology
+
+### Machine Learning Framework: JAX
+We employed **JAX** as our primary machine learning framework. JAX is a Python mathematics library developed by Google that emphasizes functional programming and composable transformations (`jit`, `grad`, `vmap`). 
+
+Unlike TensorFlow or PyTorch, JAX's transformations enable highly efficient automatic differentiation, just-in-time compilation, and vectorization of computations. This makes it incredibly well-suited for achieving large-scale computational performance. The JAX ecosystem provides the freedom to combine high-level neural network libraries and low-level modules, making it ideal for novel architectures.
+
+### Training Infrastructure
+We trained our models on a **TPU v3-8 Pod**, a high-performance computing platform provided by Google Cloud. TPUs (Tensor Processing Units) are hardware accelerators specifically designed for deep learning, offering massive speed advantages over traditional CPUs or GPUs. The v3-8 configuration provides 8 TPU cores, each featuring a traditional vector processing unit (VPU) and dedicated matrix multiplication hardware capable of processing 128x128 matrices. The TPU node was equipped with 128GB of high-speed memory, allowing for larger batches and model dimensions.
+
+### Dataset
+To navigate licensing constraints and ethical concerns, we chose the **YouTube User-Generated Content (UGC) Dataset**, shared under the Creative Commons license. The dataset contains around 1,100 high-quality video clips (20 seconds each) across labeled categories such as animation, gaming, and sports.
+
+### Training Speed & Parallelization Strategy
+In the early stages, training speed was a major bottleneck. We explored various pipeline optimizations and parallelization strategies:
+
+1. **Parallel Data Loading:** Initially, data loading and model updates happened sequentially in a single process. We implemented a **producer-consumer pattern** using Python's `multiprocessing` module. The producer extracts video frames in the background, while the consumer trains the model on the batch. Queues served as a communication channel.
+2. **Data Parallelism:** By explicitly describing distributed memory layouts in JAX (`jax.Array`), we sharded the batch data into the eight available TPU devices. Each device trains on its sharded data, and results are aggregated in the backpropagation step.
+3. **Model Parallelism (Exploration):** While we predominantly focused on data parallelism, model parallelism—which shards tensors and weights across devices—remains an important approach for models too large to fit in a single device's memory.
+
+**Results of Optimization:** The implementation of multi-processing data loading provided an enormous speedup. We saw training iteration times plummet from 30 seconds per iteration to less than a second per iteration. Overall, our training speed improved by over **10,000%**.
+
+![Batch training speed improvements](/images/blog/latent-video-diffusion/figure-9-batch-speed.png)
+
+
+## 5. Visualising the Results: VAE and Diffusion Transformers
+
+Our pipeline consisted of tuning and verifying two major sub-components: the Variational Autoencoder (VAE) and the Diffusion Transformer. The goal was to train the VAE to the highest possible standard to empower the generation qualities of the diffusion model.
+
+### 5.1 Training the Variational Autoencoder (VAE)
+The VAE trains by learning how to encode the training dataset into a latent space. A sample from a VAE is generated by sampling a latent variable $z$ through a learned distribution and reconstructing it through a decoder. VAEs train by minimizing a variational lower bound.
+
+We tracked several hyperparameters to maximize the visual fidelity of the encoder-decoder process:
+- **Verification on a Single Video:** Initial trials verified we could create high-quality reconstructions on simple inputs. We trained a model over several months and tuned bugs, achieving near-perfect reconstruction qualities on sample frames of a mountain biking video and a dog eating treats.
+- **Dataset Size:** Expanding from single videos, we trained the VAE using the full dataset. The network learned more robust and high-quality features as the dataset expanded to 1,100 videos, reducing the model loss and increasing reconstruction quality.
+- **Batch Size:** Increasing the batch size decreased variance between iterations, providing more stable gradient estimates. This offered better generalization at the cost of higher memory ceilings.
+- **Learning Rate Schedules:** Our experiments found two learning rate effects. A high rate divergence near the noise floor, while a premature rate drop did not improve loss. Our recommendation is a **two-stage training schedule**: maintaining a constant high learning rate until training slows down, followed by an exponential decay schedule (often seen in models like DALL-E Mega).
+- **Latent Vector Size:** We expanded the number of latent vectors representing an image up to 4,096 vectors, successfully maximizing a single core of the TPU. Pushing the model to higher dimensional latent grids strongly improved reconstruction quality and validated our pipeline's capacity to scale with compute.
+
+### 5.2 The "Blob": Mitigating KL Divergence & Artifacts
+A primary challenge during VAE training was limiting the Kullback-Leibler (KL) Divergence penalty. To encourage the latent variables to match a normal distribution, the KL term is explicitly introduced into the loss function. However, setting the weight of the KL divergence penalty too high led to loss of resolution, especially color accuracy.
+
+In testing the VAE, we encountered a notorious "blob-shaped" artifact. This failure mode represents a common issue among VAEs where the model subtly passes global information via a strong localized spike that dominates the pixel statistics. This phenomenon has impacted prominent models like Stable Diffusion, originating from how the VAE handles layer normalizations.
+
+To neutralize the blob artifact, we experimented with:
+1. Increasing convolution kernel sizes.
+2. Promoting channel-wise, relative interactions instead of global normalizations.
+
+Only by explicitly swapping standard layer normalization with **channel normalization** did we eliminate the "blob" phenomena, thereby ensuring clean representations moving into the diffusion stage.
+
+---
+
+### 5.3 Training the Diffusion Transformer
+The Diffusion Transformer generates realistic samples from Gaussian noise by progressively reversing the noise addition process over time ticks. Instead of relying on conventional UNet designs typical in generative imagery (e.g., Stable Diffusion 1.x), our diffusion network employs a series of stacked **self-attention layers** (transformers). 
+
+Self-attention extracts features from input token patches without respect to absolute positional dependencies. Through Multi-Head Attention, independent sets of learned matrices attend to complementary dimensions within the latent layout. The diffusion network predicts the appropriate noise vector.
+
+Because the diffusion model acts on the encoded frames, it requires significantly more parameters than the single VAE pipeline. We successfully expanded the total parameter sizes from 1.5GB to 4.5GB using a pre-trained 4,096-latent VAE. Over a 5-day training regime scaling to 350,000 iterations:
+- Substantial loss reduction over successive sizes proved that JAX models could effectively scale across TPU infrastructure.
+- At extremely large parameter counts, using learning rates above `5e-5` proved unstable and often collapsed. 
+- Overfitting an isolated biking dataset generated coherent noise removals.
+
+### 5.4 Video Generation
+To evaluate sequential coherence, we generated temporal sequences using our tuned pipeline. A randomly modeled video segment was encoded, and the generation sequence was conditioned with **5 context frames**. From that starting set, the network successfully formulated **5 successive frames** independently. 
+
+![A series of generated videos using 5 encoded frames as context](/images/blog/latent-video-diffusion/figure-27-generated.png)
+
+The color and structural results were visually similar, showcasing promising feasibility in sequential frame coherence. Moving forward, the goal is to shift from this unconditioned self-prompting to cross-attention integrations—yielding a fully text, image, or audio-conditioned generative model.
+
+
+## 6. Conclusions and Recommendations
+
+### 6.1 Conclusions
+Our project successfully demonstrated a rudimentary **Latent Video Diffusion model using JAX** and showcased its ability to train via TPUs efficiently. The code base highlights strong principles of horizontal scale across Google Cloud's environments.
+
+**Variational Autoencoder:** The VAE scaled exceptionally with parallelization strategies like proper single-process producer/consumer loading data batches. The network also required careful hyperparameter monitoring, emphasizing channel normalizations, exponential decay rate schedules, large latent sizes, and balanced KL divergence weightings. These features solved early challenges of gradient variance, the "blob" artifact, and resolution collapse.
+
+**Diffusion Transformer:** The overall limits of the generation are tied directly to the quality of the VAE embeddings. We encountered scaling barriers without explicit FSDP setups, preventing higher dimensional configurations within TPUs constraints. Our unconditioned context tests confirmed foundational generative capacities for modeling. We were able to visualize generation given five initial encoded context frames.
+
+### 6.2 Recommendations for Future Development
+Scaling up modern deep learning structures exposes hardware overhead conditions and code efficiencies as major bottlenecks. We offer the following future recommendations from our tests:
+
+1. **Distributed Training Limitations:**
+   - **Padding-Aware Computation:** A padding-aware mechanism limits the unused TPU padding. Since Cloud TPUs rely on strict 128x128 ALUs, unused sizes pad zeroes inside MXU processors, reducing operational density [4].
+   - **Activation Check-Pointing:** Reduces VRAM limits by clearing non-linear layers immediately and passively recalculating nodes exclusively on backward gradient passes utilizing `jax.checkpoint`.
+   - **Fully Sharded Data Parallel (FSDP):** Distributes parameters, gradient histories, and layer components dynamically among the TPU nodes to unlock massive training batches without singular bounds.
+
+2. **Diffusion Transformer Finetuning:**
+   - Exploring dynamic noise schedules such as variations mapped by cosine schedules, instead of rigid time ticks.
+   - Refined learning rates for deep structures.
+
+3. **Model Architectures:**
+   - Replacing decoder sub-sets of the VAE with localized diffusion transformers.
+   - Investigating alternatives like standard Batch Normalization inside the latent space rather than Layer or Channel Normalizations to maintain higher signal consistency.
+
+4. **Scaling Capabilities:**
+   - Building a production version requires larger datasets, expanding beyond the initial ~1,100 short creative-commons video datasets, and accessing extended cluster matrices.
+
+---
+
+### Resources & Deliverables
+- [GitHub Repository - simonryu328/latent-video-diffusion](https://github.com/simonryu328/latent-video-diffusion)
+
+*This project was completed by Arjun Swani, Michelle Cao, Nick Bratvold, and Simon Ryu, as a capstone for the University of British Columbia's Engineering Physics Project Laboratory.*
+

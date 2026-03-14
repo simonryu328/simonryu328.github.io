@@ -11,10 +11,13 @@ export default function Home() {
   const featuredProjects: Project[] = [
     {
       title: "Telegram AI Companion",
-      description: "A proactive Telegram bot featuring a built-in Mini App (Web App), persistent memory, and personality-driven conversations.",
+      description: "A human-like AI companion living natively on Telegram. Aki features proactive messaging, multi-bubble delivery, long-term PostgreSQL memory, and a custom built-in React Mini App to track your relationship.",
       link: "/blog/building-ai-companion-telegram",
       image: "/images/projects/demo_mini_app.gif",
+      secondaryImage: "/images/projects/aki-landing.png",
       github: "https://github.com/simonryu328/aki-the-bot",
+      externalLink: "https://aki-landing.vercel.app",
+      additionalInfo: "Aki is live and processing real-time conversations! You can start a chat right now by messaging @AkiTheBot on Telegram. Experience human-like cadence, native reactions, and a persistent memory that builds over time.",
       tags: ["Python", "OpenAI", "Mini App", "PostgreSQL"],
       variant: "featured",
       orientation: "vertical",
