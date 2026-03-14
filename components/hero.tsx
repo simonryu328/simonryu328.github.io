@@ -34,7 +34,14 @@ export function Hero() {
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            setMousePosition({ x: e.clientX, y: e.clientY });
+            const section = document.getElementById("hero-section");
+            if (section) {
+                const rect = section.getBoundingClientRect();
+                setMousePosition({
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top,
+                });
+            }
         };
 
         window.addEventListener("mousemove", handleMouseMove);
@@ -312,7 +319,7 @@ export function Hero() {
     const expertise = ["AI Engineering", "LLM Systems", "Computer Vision"];
 
     return (
-        <section className="relative mb-8 pt-8 group">
+        <section id="hero-section" className="relative mb-8 pt-8 group">
             {/* Spotlight effect */}
             <div
                 className="pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-100 transition duration-300 z-0 spotlight"
