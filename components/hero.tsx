@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { PixelAki } from "./pixel-aki";
 import { PixelDecor, type DecorType } from "./pixel-decor";
 
@@ -32,20 +32,32 @@ export function Hero() {
         ground: [50, 250, 450]
     });
 
+    const rafRef = useRef<number>(0);
+    const sectionRef = useRef<HTMLElement | null>(null);
+
+    useEffect(() => {
+        sectionRef.current = document.getElementById("hero-section");
+    }, []);
+
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            const section = document.getElementById("hero-section");
-            if (section) {
-                const rect = section.getBoundingClientRect();
-                setMousePosition({
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top,
-                });
-            }
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(() => {
+                if (sectionRef.current) {
+                    const rect = sectionRef.current.getBoundingClientRect();
+                    setMousePosition({
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top,
+                    });
+                }
+            });
         };
 
-        window.addEventListener("mousemove", handleMouseMove);
-        return () => window.removeEventListener("mousemove", handleMouseMove);
+        window.addEventListener("mousemove", handleMouseMove, { passive: true });
+        return () => {
+            window.removeEventListener("mousemove", handleMouseMove);
+            cancelAnimationFrame(rafRef.current);
+        };
     }, []);
 
     // Autonomous Wandering Logic
@@ -148,7 +160,7 @@ export function Hero() {
                 clouds: prev.clouds.map(x => (x < -200 ? 600 : x - (gameActive ? 0.5 : 0.1))),
                 ground: prev.ground.map(x => (x < -200 ? 600 : x - (gameActive ? 2 : 0.2)))
             }));
-        }, 30);
+        }, gameActive ? 30 : 150);
         return () => clearInterval(interval);
     }, [gameActive]);
 
