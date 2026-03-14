@@ -46,13 +46,13 @@ export function ProjectCard({ project }: { project: Project }) {
                 </a>
             </div>
 
-            <div className={`flex h-full ${isFeatured ? (isVertical ? "flex-col md:flex-row" : "flex-col") : "flex-col p-4"}`}>
+            <div className={`flex h-full ${isFeatured ? (isVertical ? "flex-col md:flex-row" : "flex-col") : "flex-col"}`}>
                 {/* Project Media */}
                 <div className={`relative overflow-hidden bg-neutral-100/80 dark:bg-neutral-800/50 flex items-center justify-center border-neutral-200 dark:border-neutral-800 shrink-0 ${isFeatured
                     ? isVertical
                         ? "md:w-[350px] aspect-[4/5] md:aspect-auto md:border-r border-b md:border-b-0"
                         : "aspect-[16/9] w-full border-b"
-                    : "w-12 h-12 mb-4 rounded-lg border"
+                    : "aspect-[16/9] w-full border-b"
                     }`}>
                     {isVertical && isFeatured ? (
                         <div className="relative h-[85%] aspect-[9/19.5] group-hover:scale-[1.05] transition-transform duration-700 ease-out">
@@ -89,7 +89,7 @@ export function ProjectCard({ project }: { project: Project }) {
                     )}
                 </div>
 
-                <div className={`flex flex-col flex-grow p-5 sm:p-7 ${isVertical && isFeatured ? "md:justify-center" : ""}`}>
+                <div className={`flex flex-col flex-grow ${isFeatured ? "p-5 sm:p-7" : "p-4 sm:p-5"} ${isVertical && isFeatured ? "md:justify-center" : ""}`}>
                     <div className="flex items-center gap-3 mb-3">
                         <h3 className={`${isFeatured ? "text-xl sm:text-2xl" : "text-sm"} font-semibold text-neutral-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors`}>
                             {project.title}
