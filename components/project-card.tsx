@@ -134,18 +134,9 @@ export function ProjectCard({ project }: { project: Project }) {
 
                     {isFeatured && project.additionalInfo && (
                         <div className="mb-8 p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 backdrop-blur-sm relative overflow-hidden group/live">
-                            <div className="flex items-start gap-3">
-                                <div className="mt-1 flex-shrink-0 flex items-center gap-2 px-2 py-0.5 rounded-md bg-green-500/10 border border-green-500/20">
-                                    <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                                    </span>
-                                    <span className="text-[10px] font-bold text-green-600 dark:text-green-400 tracking-wider">LIVE</span>
-                                </div>
-                                <p className="text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
-                                    {project.additionalInfo}
-                                </p>
-                            </div>
+                            <p className="text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
+                                {project.additionalInfo}
+                            </p>
                         </div>
                     )}
 
