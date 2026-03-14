@@ -22,7 +22,7 @@ export function ProjectCard({ project }: { project: Project }) {
     return (
         <div className={`group relative rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-300 overflow-hidden cursor-pointer ${isFeatured ? "sm:col-span-2" : ""}`}>
             {/* Action Links */}
-            <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
+            <div className="absolute bottom-4 right-4 flex items-center gap-2 z-20">
                 {project.telegram && (
                     <a
                         href={project.telegram}
