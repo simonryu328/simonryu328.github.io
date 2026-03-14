@@ -133,7 +133,7 @@ export function ProjectCard({ project }: { project: Project }) {
                     )}
 
                     {isFeatured && project.additionalInfo && (
-                        <div className="mb-8 p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 backdrop-blur-sm relative overflow-hidden group/live">
+                        <div className="mb-8 p-4 rounded-xl bg-[#24A1DE]/5 dark:bg-[#24A1DE]/10 border border-[#24A1DE]/20 backdrop-blur-sm relative overflow-hidden group/live">
                             <div className="flex items-start gap-3">
                                 <span className="relative flex h-2 w-2 mt-1.5 shrink-0">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
