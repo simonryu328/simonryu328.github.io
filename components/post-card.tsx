@@ -7,10 +7,10 @@ export function PostCard({ post }: { post: PostMeta }) {
         <Link href={`/blog/${post.slug}`} className="group block">
             <article className="py-6 border-b border-neutral-100 dark:border-neutral-800 group-hover:border-neutral-300 dark:group-hover:border-neutral-600 transition-colors flex gap-6 items-start">
                 <div className="flex-shrink-0 pt-1">
-                    <div className="w-14 h-14 flex items-center justify-center rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 group-hover:border-neutral-200 dark:group-hover:border-neutral-700 transition-colors shadow-sm group-hover:shadow transition-all duration-300">
+                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 group-hover:border-neutral-200 dark:group-hover:border-neutral-700 transition-colors shadow-sm group-hover:shadow transition-all duration-300">
                         <BlogIcon 
                             slug={post.slug} 
-                            size={40} 
+                            size={32} 
                             className="text-neutral-400 dark:text-neutral-600 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" 
                         />
                     </div>
