@@ -1,10 +1,15 @@
+"use client";
+
 import Link from "next/link";
+import { useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export interface Project {
     title: string;
     description: string;
     link: string;
     image: string;
+    gif?: string;
     github?: string;
     tags: string[];
     secondaryImage?: string;
@@ -18,12 +23,33 @@ export interface Project {
 export function ProjectCard({ project }: { project: Project }) {
     const isFeatured = project.variant === "featured";
     const isVertical = project.orientation === "vertical";
+    const [showGif, setShowGif] = useState(false);
+    const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleMouseEnter = () => {
+        if (project.gif) {
+            hoverTimeoutRef.current = setTimeout(() => {
+                setShowGif(true);
+            }, 500);
+        }
+    };
+
+    const handleMouseLeave = () => {
+        if (hoverTimeoutRef.current) {
+            clearTimeout(hoverTimeoutRef.current);
+        }
+        setShowGif(false);
+    };
 
     return (
-        <div className={`group relative rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-300 overflow-hidden cursor-pointer ${isFeatured ? "sm:col-span-2" : ""}`}>
+        <div
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            className={`group relative rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-300 overflow-hidden cursor-pointer ${isFeatured ? "sm:col-span-2" : ""}`}
+        >
 
             {/* Main Link Overlay */}
-            <Link 
+            <Link
                 href={project.link}
                 className="absolute inset-0 z-10"
                 aria-label={`View ${project.title}`}
@@ -41,17 +67,30 @@ export function ProjectCard({ project }: { project: Project }) {
                         <div className="relative h-[85%] aspect-[9/19.5] group-hover:scale-[1.05] transition-transform duration-700 ease-out">
                             {/* Phone Frame Bezel with Heavy Depth */}
                             <div className="absolute -inset-[3px] rounded-[2.5rem] border-[3px] border-neutral-800 dark:border-neutral-700 bg-neutral-900 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] dark:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)]" />
-                            
+
                             {/* The Screen */}
                             <div className="relative h-full w-full rounded-[2.2rem] overflow-hidden bg-black border border-neutral-800/50">
                                 {/* Notch / Dynamic Island */}
                                 <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-4 bg-neutral-900 rounded-full z-10 hidden md:block border border-white/5" />
-                                
+
                                 <img
                                     src={project.image}
                                     alt={project.title}
                                     className="w-full h-full object-cover"
                                 />
+                                <AnimatePresence>
+                                    {showGif && project.gif && (
+                                        <motion.img
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            transition={{ duration: 0.5 }}
+                                            src={project.gif}
+                                            alt={`${project.title} demo`}
+                                            className="absolute inset-0 w-full h-full object-cover z-0"
+                                        />
+                                    )}
+                                </AnimatePresence>
                             </div>
                         </div>
                     ) : (
@@ -65,6 +104,19 @@ export function ProjectCard({ project }: { project: Project }) {
                                     : "w-full h-full object-cover"
                                     }`}
                             />
+                            <AnimatePresence>
+                                {showGif && project.gif && (
+                                    <motion.img
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.5 }}
+                                        src={project.gif}
+                                        alt={`${project.title} demo`}
+                                        className="absolute inset-0 w-full h-full object-cover z-0"
+                                    />
+                                )}
+                            </AnimatePresence>
                             {isFeatured && (
                                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-200/20 dark:from-neutral-900/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                             )}
@@ -87,7 +139,7 @@ export function ProjectCard({ project }: { project: Project }) {
                                     aria-label="Telegram Bot"
                                 >
                                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
                                     </svg>
                                 </a>
                             )}
@@ -106,13 +158,13 @@ export function ProjectCard({ project }: { project: Project }) {
                             )}
                         </div>
                     </div>
-                    
+
                     <p className={`${isFeatured ? "text-sm sm:text-base leading-relaxed" : "text-xs"} text-neutral-600 dark:text-neutral-400 mb-6 flex-grow max-w-xl`}>
                         {project.description}
                     </p>
 
                     {isFeatured && project.secondaryImage && project.externalLink && (
-                        <a 
+                        <a
                             href={project.externalLink}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -134,9 +186,9 @@ export function ProjectCard({ project }: { project: Project }) {
                             </div>
                             {/* Site Preview Image */}
                             <div className="aspect-[16/8] md:aspect-[16/12] overflow-hidden grayscale-[30%] group-hover/site:grayscale-0 transition-all duration-500">
-                                <img 
-                                    src={project.secondaryImage} 
-                                    alt="Website Preview" 
+                                <img
+                                    src={project.secondaryImage}
+                                    alt="Website Preview"
                                     className="w-full h-full object-cover object-top scale-100 group-hover/site:scale-110 transition-transform duration-700"
                                 />
                             </div>
