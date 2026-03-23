@@ -5,17 +5,15 @@ import { BlogIcon } from "./blog-icons";
 export function PostCard({ post }: { post: PostMeta }) {
     return (
         <Link href={`/blog/${post.slug}`} className="group block">
-            <article className="py-6 border-b border-neutral-100 dark:border-neutral-800 group-hover:border-neutral-300 dark:group-hover:border-neutral-600 transition-colors flex gap-6 items-start">
-                <div className="flex-shrink-0 pt-1">
-                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 group-hover:border-neutral-200 dark:group-hover:border-neutral-700 transition-colors shadow-sm group-hover:shadow transition-all duration-300">
-                        <BlogIcon 
-                            slug={post.slug} 
-                            size={32} 
-                            className="text-neutral-400 dark:text-neutral-600 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" 
-                        />
-                    </div>
+            <article className="py-8 border-b border-neutral-100 dark:border-neutral-800 flex flex-col sm:flex-row gap-8 items-start">
+                <div className="w-full sm:w-80 flex-shrink-0">
+                    <BlogIcon 
+                        slug={post.slug} 
+                        size="full"
+                        className="text-neutral-400 dark:text-neutral-600 group-hover:text-blue-500 dark:group-hover:text-blue-400 w-full rounded-2xl shadow-sm group-hover:shadow-md" 
+                    />
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 pt-1">
                     <div className="flex items-center gap-2 text-sm text-neutral-500 mb-2">
                         <time dateTime={post.date}>
                             {new Date(post.date).toLocaleDateString("en-US", {

@@ -5,6 +5,7 @@ import { getPostBySlug, getAllSlugs } from "@/lib/blog";
 import { mdxComponents } from "@/components/mdx-components";
 import { ReadingProgress } from "@/components/reading-progress";
 import { TableOfContents } from "@/components/toc";
+import { BlogIcon } from "@/components/blog-icons";
 import rehypePrettyCode from "rehype-pretty-code";
 import remarkGfm from "remark-gfm";
 import type { Metadata } from "next";
@@ -61,7 +62,7 @@ export default async function BlogPost({ params }: Props) {
                 {/* Left empty space to balance the TOC and keep article centered */}
                 <div className="hidden lg:block w-[200px]" aria-hidden="true" />
 
-                <article className="max-w-2xl mx-auto w-full">
+                <article className="max-w-3xl mx-auto w-full">
                     <Link
                         href="/blog"
                         className="inline-flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors mb-8 group"
@@ -101,17 +102,21 @@ export default async function BlogPost({ params }: Props) {
                         )}
                     </header>
 
-                    {/* Cover image */}
-                    {post.image && (
-                        <div className="mb-10 -mx-4 sm:mx-0">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {/* Main Header / Cover Image */}
+                    <div className="mb-10 -mx-4 sm:mx-0 overflow-hidden">
+                        <BlogIcon 
+                            slug={post.slug} 
+                            size="full"
+                            className="w-full h-auto text-neutral-400 dark:text-neutral-600 sm:rounded-2xl" 
+                        />
+                        {post.image && (
                             <img
                                 src={post.image.path}
                                 alt={post.image.alt}
-                                className="w-full rounded-lg shadow-lg"
+                                className="w-full rounded-lg shadow-lg mt-8"
                             />
-                        </div>
-                    )}
+                        )}
+                    </div>
 
                     {/* Content */}
                     <div className="prose">
