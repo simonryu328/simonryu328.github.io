@@ -5,7 +5,7 @@ import { BlogIcon } from "./blog-icons";
 export function PostCard({ post }: { post: PostMeta }) {
     return (
         <Link href={`/blog/${post.slug}`} className="group block">
-            <article className="py-8 border-b border-neutral-100 dark:border-neutral-800 flex flex-col sm:flex-row gap-8 items-start">
+            <article className="py-8 border-b border-neutral-100 dark:border-neutral-800 flex flex-col sm:flex-row gap-8 items-start rounded-xl px-4 -mx-4 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 hover:-translate-y-px transition-all duration-200">
                 <div className="w-full sm:w-80 flex-shrink-0">
                     <BlogIcon 
                         slug={post.slug} 

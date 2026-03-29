@@ -3,6 +3,7 @@ import { getAllPosts } from "@/lib/blog";
 import { PostCard } from "@/components/post-card";
 import { Hero } from "@/components/hero";
 import { ProjectCard, type Project } from "@/components/project-card";
+import { FadeInSection } from "@/components/fade-in-section";
 
 export default function Home() {
   const posts = getAllPosts();
@@ -73,32 +74,36 @@ export default function Home() {
       <Hero />
 
       {/* Projects */}
-      <section className="mb-20">
-        <h2 className="text-xl font-semibold mb-6">Featured Projects</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {featuredProjects.map((project) => (
-            <ProjectCard key={project.title} project={project} />
-          ))}
-        </div>
-      </section>
+      <FadeInSection>
+        <section className="mb-20">
+          <h2 className="text-xl font-semibold mb-6">Featured Projects</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {featuredProjects.map((project) => (
+              <ProjectCard key={project.title} project={project} />
+            ))}
+          </div>
+        </section>
+      </FadeInSection>
 
       {/* Recent Posts */}
-      <section>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold">Blog</h2>
-          <Link
-            href="/blog"
-            className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
-          >
-            View all articles →
-          </Link>
-        </div>
-        <div>
-          {recentPosts.map((post) => (
-            <PostCard key={post.slug} post={post} />
-          ))}
-        </div>
-      </section>
+      <FadeInSection delay={0.1}>
+        <section>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold">Blog</h2>
+            <Link
+              href="/blog"
+              className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+            >
+              View all articles →
+            </Link>
+          </div>
+          <div>
+            {recentPosts.map((post) => (
+              <PostCard key={post.slug} post={post} />
+            ))}
+          </div>
+        </section>
+      </FadeInSection>
     </div>
   );
 }

@@ -14,7 +14,7 @@ export function Nav() {
 
     return (
         <nav className="sticky top-0 z-50 backdrop-blur-md bg-white/80 dark:bg-neutral-950/80 border-b border-neutral-200 dark:border-neutral-800">
-            <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
+            <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
                 <div className="flex items-center gap-6">
                     <Link
                         href="/"

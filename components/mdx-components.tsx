@@ -16,6 +16,19 @@ const slugify = (node: any) => {
         .replace(/[^\w-]+/g, "");
 };
 
+const HeadingAnchor = ({ id, children, className }: { id: string; children: React.ReactNode; className: string }) => (
+    <div className={`group/heading relative ${className}`}>
+        <a
+            href={`#${id}`}
+            className="absolute -left-6 top-0 bottom-0 flex items-center opacity-0 group-hover/heading:opacity-100 transition-opacity duration-200 text-neutral-400 hover:text-blue-500 no-underline"
+            aria-label={`Link to section`}
+        >
+            #
+        </a>
+        {children}
+    </div>
+);
+
 export const mdxComponents: MDXComponents = {
     h1: (props) => {
         const id = slugify(props.children);
@@ -24,16 +37,22 @@ export const mdxComponents: MDXComponents = {
     h2: (props) => {
         const id = slugify(props.children);
         return (
-            <h2
-                id={id}
-                className="text-2xl font-semibold mt-10 mb-3 text-neutral-900 dark:text-white border-b border-neutral-200 dark:border-neutral-800 pb-2"
-                {...props}
-            />
+            <HeadingAnchor id={id} className="mt-10 mb-3">
+                <h2
+                    id={id}
+                    className="text-2xl font-semibold text-neutral-900 dark:text-white border-b border-neutral-200 dark:border-neutral-800 pb-2"
+                    {...props}
+                />
+            </HeadingAnchor>
         );
     },
     h3: (props) => {
         const id = slugify(props.children);
-        return <h3 id={id} className="text-xl font-semibold mt-8 mb-3 text-neutral-900 dark:text-white" {...props} />;
+        return (
+            <HeadingAnchor id={id} className="mt-8 mb-3">
+                <h3 id={id} className="text-xl font-semibold text-neutral-900 dark:text-white" {...props} />
+            </HeadingAnchor>
+        );
     },
     p: (props) => (
         <p className="mb-4 leading-7 text-neutral-700 dark:text-neutral-300" {...props} />

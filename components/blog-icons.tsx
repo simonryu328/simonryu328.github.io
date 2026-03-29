@@ -1,215 +1,108 @@
-"use client";
-
 import React from "react";
 import Image from "next/image";
 
-/**
- * Modern Abstract 16x16 Pixel Art Icons.
- * Minimalist metaphors using depth through subtle shading.
- */
-const ICON_DESIGNS = {
-    performance: [
-        "................",
-        ".........XX.....",
-        "........XXXX....",
-        ".......XXXXX....",
-        "......XXXXXX....",
-        ".....XXXXXXX....",
-        "....XXXXXXXX....",
-        "...XXXXXXXXH....",
-        ".......XXXX.....",
-        "......XXXXS.....",
-        ".....XXXXSS.....",
-        "....XXXXSSS.....",
-        "...XXXXSSS......",
-        "..XXXXSSS.......",
-        ".XXXXSSS........",
-        "................",
-    ],
-    ar: [
-        "................",
-        "................",
-        "....XXXXXXX.....",
-        "...XXXXXXXXX....",
-        "..XXXXXXXXXXX...",
-        "..XXXX...XXXX...",
-        "..XXX.....XXX...",
-        "..XX.......XX...",
-        "..XX.......XX...",
-        "..XXX.....XXX...",
-        "..XXXX...XXXX...",
-        "..XXXXXXXXXXX...",
-        "...XXXXXXXXX....",
-        "....XXXXXXX.....",
-        "................",
-        "................",
-    ],
-    telegram: [
-        "................",
-        "...............X",
-        "............XXXX",
-        ".........XXXXXXX",
-        "......XXXXXXXXXX",
-        "...XXXXXXXXXXXXX",
-        "XXXXXXXXXXXXXXXX",
-        "...XXXXXXXXXXXXX",
-        "......XXXXXXXXXX",
-        ".........XXXXXXX",
-        "............XXXX",
-        "...............X",
-        "................",
-        "................",
-        "................",
-        "................",
-    ],
-    agent: [
-        "................",
-        "......XXXX......",
-        "....XXXXXXXX....",
-        "...XXXXXXXXXX...",
-        "..XXXXXXXXXXXX..",
-        "..XXXXXXXXXXXX..",
-        "..XXXXHHHHXXXX..",
-        "..XXXXHHHHXXXX..",
-        "..XXXXHHHHXXXX..",
-        "..XXXXHHHHXXXX..",
-        "..XXXXXXXXXXXX..",
-        "..XXXXXXXXXXXX..",
-        "...XXXXXXXXXX...",
-        "....XXXXXXXX....",
-        "......XXXX......",
-        "................",
-        "................",
-    ],
-    database: [
-        "................",
-        "....XXXXXXXX....",
-        "...XXXXXXXXXX...",
-        "..XXXXXXXXXXXX..",
-        "..XXXXXXXXXXXX..",
-        "..SSSSSSSSSSSS..",
-        "................",
-        "..XXXXXXXXXXXX..",
-        "..XXXXXXXXXXXX..",
-        "..SSSSSSSSSSSS..",
-        "................",
-        "..XXXXXXXXXXXX..",
-        "..XXXXXXXXXXXX..",
-        "..SSSSSSSSSSSS..",
-        "................",
-        "................",
-    ],
-    vision: [
-        "................",
-        "................",
-        ".....XXXXXX.....",
-        "...XXXXXXXXXX...",
-        "..XXXXXXXXXXXX..",
-        "..XXXXHHHHXXXX..",
-        "..XXXHHHHHHXXX..",
-        "..XXHHHHHHHHXX..",
-        "..XXHHHHHHHHXX..",
-        "..XXXHHHHHHXXX..",
-        "..XXXXHHHHXXXX..",
-        "..XXXXXXXXXXXX..",
-        "...XXXXXXXXXX...",
-        ".....XXXXXX.....",
-        "................",
-        "................",
-    ],
-    golf: [
-        "................",
-        "......XXXX......",
-        "....XXXXXXXX....",
-        "...XXXXXXXXXX...",
-        "..XXXXXXXXXXXX..",
-        "..XXXXXXXXXXXX..",
-        "...XXXXXXXXXX...",
-        "....XXXXXXXX....",
-        "......XXXX......",
-        ".......XX.......",
-        ".......XX.......",
-        "......XXXX......",
-        "................",
-        "................",
-        "................",
-        "................",
-    ],
-    video: [
-        "................",
-        "..XXXXXXXXXXXX..",
-        "..X..........X..",
-        "..X..XXXXXX..X..",
-        "..X..XH..SX..X..",
-        "..X..XH..SX..X..",
-        "..X..XXXXXX..X..",
-        "..X..........X..",
-        "..X..XXXXXX..X..",
-        "..X..XH..SX..X..",
-        "..X..XH..SX..X..",
-        "..X..XXXXXX..X..",
-        "..X..........X..",
-        "..XXXXXXXXXXXX..",
-        "................",
-        "................",
-    ],
-    math: [
-        "................",
-        "...XXXXXXXXXX...",
-        "...XHHHHHHHHH...",
-        "......XXXXX.....",
-        ".....XXXXX......",
-        "....XXXXX.......",
-        "...XXXXX........",
-        "....XXXXX.......",
-        ".....XXXXX......",
-        "......XXXXX.....",
-        "...XHHHHHHHHH...",
-        "...XXXXXXXXXX...",
-        "................",
-        "................",
-        "................",
-        "................",
-    ],
-    research: [
-        "................",
-        ".....XXXXX......",
-        "....XXXXXXX.....",
-        "...XXXXXXXXX....",
-        "...XXXXXXXXX....",
-        "....XXXXXXX.....",
-        ".....XXXXX......",
-        ".......XX.......",
-        "........XX......",
-        ".........XX.....",
-        "..........XX....",
-        "...........XX...",
-        "............XX..",
-        "................",
-        "................",
-        "................",
-    ],
-    motion: [
-        "................",
-        "................",
-        "..........XXXX..",
-        ".......XXXXXX...",
-        "....XXXXXXX.....",
-        "...XXXXXX.......",
-        "..XXXXX.........",
-        ".XXXX...........",
-        ".XXX............",
-        ".XX.............",
-        ".X..............",
-        "................",
-        "................",
-        "................",
-        "................",
-        "................",
-    ],
+// AI-Generated SVG Paths using a strict consistent rule engine:
+// 24x24 Viewbox, 1.5 Stroke Width, Round Linecaps/Joints.
+
+const ICON_REGISTRY = {
+    // A dashboard gauge for speed/performance
+    performance: (
+        <>
+            <path d="M12 16v-4" />
+            <path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" />
+            <path d="M8 12l2-2" />
+        </>
+    ),
+    // A 3D bounding box / viewport for AR
+    ar: (
+        <>
+            <path d="M4 8V4h4" />
+            <path d="M16 4h4v4" />
+            <path d="M4 16v4h4" />
+            <path d="M16 20h4v-4" />
+            <path d="M9 12l6-6" />
+            <path d="M15 15l-3-3" />
+            <circle cx="9" cy="15" r="1.5" />
+            <circle cx="15" cy="9" r="1.5" />
+        </>
+    ),
+    // A digital paper plane for a Telegram messaging bot
+    telegram: (
+        <>
+            <path d="M22 2L11 13" />
+            <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+        </>
+    ),
+    // A brain/sparkle network for an autonomous AI agent
+    agent: (
+        <>
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+        </>
+    ),
+    // A cylindrical server stack for DynamoDB/Database
+    database: (
+        <>
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M3 5V19A9 3 0 0 0 21 19V5" />
+            <path d="M3 12A9 3 0 0 0 21 12" />
+        </>
+    ),
+    // An eye with an internal tracking box for CNN/Vision
+    vision: (
+        <>
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+            <rect x="9" y="9" width="6" height="6" rx="1" />
+        </>
+    ),
+    // A flag on a green for Golf
+    golf: (
+        <>
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+            <line x1="4" y1="22" x2="4" y2="15" />
+        </>
+    ),
+    // A clapperboard/film reel for Latent Video Diffusion
+    video: (
+        <>
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+            <path d="M2 8h20" />
+            <path d="M6 4v4" />
+            <path d="M10 4v4" />
+            <path d="M14 4v4" />
+            <path d="M18 4v4" />
+            <circle cx="12" cy="14" r="2" />
+        </>
+    ),
+    // Mathematical symbols (sigma/function nodes) for LLM Math
+    math: (
+        <>
+            <path d="M4 6h10l-4 6 4 6H4" />
+            <path d="M17 18h3" />
+            <path d="M17 14h3" />
+            <path d="M18.5 12v6" />
+        </>
+    ),
+    // A pendulum or sweeping arc for Swing Analysis/Motion
+    motion: (
+        <>
+            <path d="M12 3v12" />
+            <circle cx="12" cy="18" r="3" />
+            <path d="M12 21a9 9 0 0 0 9-9" />
+            <path d="M3 12a9 9 0 0 0 9 9" />
+        </>
+    ),
+    // A magnifying glass inspecting a multi-node graph for Deep Research
+    research: (
+        <>
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <path d="M11 8v6" />
+            <path d="M8 11h6" />
+        </>
+    ),
 };
 
-const SLUG_TO_ICON: Record<string, keyof typeof ICON_DESIGNS> = {
+const SLUG_TO_ICON: Record<string, keyof typeof ICON_REGISTRY> = {
     "aki-performance-and-scalability": "performance",
     "ar-menu": "ar",
     "building-ai-companion-telegram": "telegram",
@@ -271,40 +164,24 @@ export function BlogIcon({
         );
     }
 
-    // Fallback to legacy pixel art
+    // Fallback to SVG icons
     const iconKey = SLUG_TO_ICON[slug] || "agent";
-    const grid = ICON_DESIGNS[iconKey];
-    
-    // Default size for SVG if not provided or if "full" (which makes no sense for pixel art)
-    const svgSize = typeof size === "number" ? size : 48;
+    const paths = ICON_REGISTRY[iconKey];
 
     return (
         <svg
-            width={svgSize}
-            height={svgSize}
-            viewBox="0 0 16 16"
-            className={`fill-current ${className}`}
+            width={typeof size === "number" ? size : 48}
+            height={typeof size === "number" ? size : 48}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`${className}`}
             aria-label={`Icon for ${slug}`}
         >
-            {grid.map((row: string, y: number) => (
-                row.split("").map((char: string, x: number) => {
-                    let opacity = 1;
-                    if (char === "S") opacity = 0.4;
-                    if (char === "H") opacity = 0.8;
-                    
-                    return char !== "." ? (
-                        <rect
-                            key={`${x}-${y}`}
-                            x={x}
-                            y={y}
-                            width="1"
-                            height="1"
-                            shapeRendering="crispEdges"
-                            style={{ opacity }}
-                        />
-                    ) : null;
-                })
-            ))}
+            {paths}
         </svg>
     );
 }

@@ -6,6 +6,7 @@ import { mdxComponents } from "@/components/mdx-components";
 import { ReadingProgress } from "@/components/reading-progress";
 import { TableOfContents } from "@/components/toc";
 import { BlogIcon } from "@/components/blog-icons";
+import { ScrollToTop } from "@/components/scroll-to-top";
 import rehypePrettyCode from "rehype-pretty-code";
 import remarkGfm from "remark-gfm";
 import type { Metadata } from "next";
@@ -58,6 +59,7 @@ export default async function BlogPost({ params }: Props) {
     return (
         <div className="max-w-7xl mx-auto px-4 py-16">
             <ReadingProgress />
+            <ScrollToTop />
             <div className="lg:grid lg:grid-cols-[200px_1fr_200px] lg:gap-x-12 justify-center">
                 {/* Left empty space to balance the TOC and keep article centered */}
                 <div className="hidden lg:block w-[200px]" aria-hidden="true" />
