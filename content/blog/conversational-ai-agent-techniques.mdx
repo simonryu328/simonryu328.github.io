@@ -1,5 +1,5 @@
 ---
-title: "Part 2: Aki - Conversational AI Agent Techniques"
+title: "Part 2: Conversational AI Agent Techniques"
 date: 2026-03-08
 categories: [AI, Software Engineering]
 tags: [LLM, Python, Claude, Prompt Engineering, Memory, Architecture]
@@ -7,7 +7,7 @@ tags: [LLM, Python, Claude, Prompt Engineering, Memory, Architecture]
 
 Building a conversational AI agent isn't structurally difficult—you take a user's text, send it to an API, and return the response. But building one that actually works, that remembers who you are, costs a reasonable amount to run, and doesn't feel like talking to a rigid corporate form, is an entirely different engineering challenge. 
 
-This post is a deep dive into the conversational techniques and memory systems behind the AI companion I built on Telegram. I realized that a good companion needs to handle a few specific problems: overcoming LLM statelessness, bridging short-term exchanges with a long-term sense of identity, managing context window limits, and utilizing structured schemas to make the AI output feel more human.
+This post is a deep dive into the conversational techniques and memory systems behind Aki, the AI companion I built on Telegram. I realized that a good companion needs to handle a few specific problems: overcoming LLM statelessness, bridging short-term exchanges with a long-term sense of identity, managing context window limits, and utilizing structured schemas to make the AI output feel more human.
 
 > The source code is on GitHub, found [here](https://github.com/simonryu328/aki-the-bot). The project landing page is at [aki-landing.vercel.app](https://aki-landing.vercel.app/). The first part of this series covering the Telegram infrastructure and my personal journey building this is [here](/blog/building-ai-companion-telegram).
 
@@ -74,7 +74,7 @@ To fix this, I abandoned free-text output and enforced a strict XML schema for e
 </message>
 ```
 
-In the backend, I built a cascading parser. It first looks for the strict `<?xml version="1.0"?>` wrapper. If the model hallucinates and breaks the root tag, it falls back to regex-extracting standalone `<thinking>` and `<response>` blocks. If the model forgets XML entirely, it defaults to breaking the output along standard line breaks or `[BREAK]` tags. This multi-layered parsing ensures the bot never crashes even if the AI output gets messy.
+In the backend, I built a cascading parser for Aki. It first looks for the strict `<?xml version="1.0"?>` wrapper. If the model hallucinations and breaks the root tag, it falls back to regex-extracting standalone `<thinking>` and `<response>` blocks. If the model forgets XML entirely, it defaults to breaking the output along standard line breaks or `[BREAK]` tags. This multi-layered parsing ensures Aki never crashes even if the AI output gets messy.
 
 ### The Dynamic vs. Static Persona Split
 
@@ -159,13 +159,13 @@ By storing both types of records, the agent can reference a past event while als
 
 A companion shouldn't just sit statically waiting for you to query it. Real friends text first. They reach out when they haven't heard from you. 
 
-I built an asynchronous background task utilizing the `python-telegram-bot` strictly native `JobQueue` module (`run_repeating(..., interval=3600)`). Every 60 minutes, the orchestrator executes a wide `asyncpg` SQL sweep across the Neon PostgreSQL database, specifically looking for users who have not interacted with the bot in over 12 hours (the `min_silence_hours` threshold). When the scanner flags an inactive user, it gathers their recent `compact_summary` entries and passes them through a specialized proactive prompt.
+I built an asynchronous background task utilizing the `python-telegram-bot` strictly native `JobQueue` module (`run_repeating(..., interval=3600)`). Every 60 minutes, the orchestrator executes a wide `asyncpg` SQL sweep across the Neon PostgreSQL database, specifically looking for users who have not interacted with Aki in over 12 hours (the `min_silence_hours` threshold). When the scanner flags an inactive user, it gathers their recent `compact_summary` entries and passes them through a specialized proactive prompt.
 
-Instead of generating a generic "checking in like a wellness app" message ( *"How are you feeling today?"* ), the prompt forces the LLM to scan the memory exclusively for **unfinished threads**. 
+Instead of generating a generic "checking in like a wellness app" message ( *"How are you feeling today?"* ), the prompt forces Aki to scan the memory exclusively for **unfinished threads**. 
 
 The result is a notification that feels organic: *"Hey, did you ever finish writing that python script you were stressing over yesterday?"* 
 
-The agent uses these reach-outs to prove it's actively "thinking" about the user even when the chat window is closed. Naturally, users can configure the frequency, quiet-hours, or entirely disable these reach-outs via native Telegram commands (such as `/reachout_settings` which invokes an inline UI menu).
+Aki uses these reach-outs to prove it's actively "thinking" about the user even when the chat window is closed. Naturally, users can configure the frequency, quiet-hours, or entirely disable these reach-outs via native Telegram commands (such as `/reachout_settings` which invokes an inline UI menu).
 
 ---
 

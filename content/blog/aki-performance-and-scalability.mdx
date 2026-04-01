@@ -1,11 +1,11 @@
 ---
-title: "Part 3: Aki - The Performance Architecture"
+title: "Part 3: Performance Architecture"
 date: 2026-03-09
 categories: [AI, Software Engineering]
 tags: [Python, FastAPI, asyncio, PostgreSQL, Claude, Performance, Architecture]
 ---
 
-This is the third post in the engineering series over my AI companion bot. Part 1 covered the Telegram interface and the Mini App design. Part 2 broke down the conversation processing, memory triggers, and LLM schemas. This final post revolves around the operational side: how a single Python process manages state, prevents hallucinations without tanking latency, handles message concurrency without crashing, and keeps the API tokens from putting me in debt.
+This is the third post in the engineering series over Aki, my AI companion bot. Part 1 covered the Telegram interface and the Mini App design. Part 2 broke down the conversation processing, memory triggers, and LLM schemas. This final post revolves around the operational side: how a single Python process manages state, prevents hallucinations without tanking latency, handles message concurrency without crashing, and keeps the API tokens from putting me in debt.
 
 > The source code is on GitHub, found [here](https://github.com/simonryu328/aki-the-bot). The project landing page is at [aki-landing.vercel.app](https://aki-landing.vercel.app/). Part 1 is [here](/blog/building-ai-companion-telegram) and Part 2 is [here](/blog/conversational-ai-agent-techniques).
 

@@ -10,9 +10,9 @@ image:
 
 I started this project after hearing about [OpenClaw](https://github.com/openclaw/openclaw)—an open-source AI assistant that runs autonomously and connects directly to messaging platforms like Telegram. Instead of just answering prompts in a sterile web interface, it executed real-world tasks and lived natively where people actually communicate. The concept really fascinated me.
 
-I wanted to make a Telegram bot that texts just like a human does. Think of it as passing a personal Turing Test. I didn't want a generic chatbot that just responds to prompts with a single wall of text; I wanted something that felt genuinely present in my daily life. This meant the bot needed to be capable of sending multiple short messages instead of paragraphs, triggering typing indicators perfectly timed to response lengths, dropping emojis natively, reacting to my messages, and remembering context across weeks of conversations.
+I wanted to make a Telegram bot that texts just like a human does. Think of it as passing a personal Turing Test. I didn't want a generic chatbot that just responds to prompts with a single wall of text; I wanted something that felt genuinely present in my daily life. This meant Aki needed to be capable of sending multiple short messages instead of paragraphs, triggering typing indicators perfectly timed to response lengths, dropping emojis natively, reacting to my messages, and remembering context across weeks of conversations.
 
-This is the first part of my journal documenting the engineering decisions behind building this AI companion. Instead of just showing API calls, I'll walk through the practical challenges of making an agent feel "alive"—from hosting webhooks to engineering a robust operations dashboard, and designing a companion Mini App so the AI has a "life" outside the text box.
+This is the first part of my journal documenting the engineering decisions behind building Aki. Instead of just showing API calls, I'll walk through the practical challenges of making an agent feel "alive"—from hosting webhooks to engineering a robust operations dashboard, and designing an Aki Mini App so the AI has a "life" outside the text box.
 
 > The source code is available on GitHub [here](https://github.com/simonryu328/aki-the-bot), and you can see the project landing page at [aki-landing.vercel.app](https://aki-landing.vercel.app/).
 
@@ -122,7 +122,7 @@ Furthermore, I invoke Telegram's typing indicator API before every single messag
 
 Typing indicators and emojis are just scratching the surface. The standard text-in, text-out chatbot model is inherently limiting. The Telegram Bot SDK provides a rich set of native tools that allow a bot to act much more like a human operating a smartphone. 
 
-For instance, consider how friction-heavy text commands are. If you want a user to confirm an action, forcing them to type "yes" or "no" breaks the conversational flow. Instead, the SDK supports `InlineKeyboardMarkup`. I engineered Aki's settings dialogues so that when it asks a procedural question (e.g., "Are you okay with me texting you first sometimes?"), it attaches inline `[Yes]` and `[No]` buttons directly beneath the message bubble. 
+For instance, consider how friction-heavy text commands are. If you want a user to confirm an action, forcing them to type "yes" or "no" breaks the conversational flow. Instead, the SDK supports `InlineKeyboardMarkup`. I engineered the bot's settings dialogues so that when it asks a procedural question (e.g., "Are you okay with me texting you first sometimes?"), it attaches inline `[Yes]` and `[No]` buttons directly beneath the message bubble. 
 
 ```python
 # snippet of the inline keyboard routing
@@ -138,7 +138,7 @@ await update.message.reply_text(
 
 When the user taps a button, a silent `CallbackQuery` is fired to the FastAPI server in the background. The bot instantly answers the query and gracefully edits its original message text to reflect the choice, effectively turning the chat history into an interactive UI rather than a static log.
 
-Furthermore, the Bot SDK natively supports structured media. A truly convincing Turing test isn't just about text; it's about multimedia communication. If Aki needs to suggest a location, it doesn't send a Google Maps link—it sends a native Telegram Location object. If it needs to prove it "listened" to a Spotify track, it can send an Audio file wrapper. 
+Furthermore, the Bot SDK natively supports structured media. A truly convincing Turing test isn't just about text; it's about multimedia communication. If the bot needs to suggest a location, it doesn't send a Google Maps link—it sends a native Telegram Location object. If it needs to prove it "listened" to a Spotify track, it can send an Audio file wrapper. 
 
 By mapping the LLM's intent to these native Telegram objects rather than forcing everything into string output, the agent begins to behave less like a terminal script and more like a fully-featured chat client. This level of tight API integration is what transforms a "wrapper" into a companion.
 
@@ -197,7 +197,7 @@ Telegram solves this elegantly with their native Bot Payments API. It acts as a 
 
 However, for digital goods (like LLM token refills or premium software features), Apple and Google's strict App Store policies historically blocked native in-app processing for bots. To bypass this friction, Telegram introduced "Telegram Stars"—an in-app virtual currency that users can casually purchase through their phone's native IAP flow.
 
-This fundamentally shifts the monetization paradigm for personal AI agents. If Aki runs low on its allocated weekly API budget, it doesn't need to send a jarring link to a generic billing portal. Instead, the backend can issue a native `sendInvoice` command. 
+This fundamentally shifts the monetization paradigm for personal AI agents. If the bot runs low on its allocated weekly API budget, it doesn't need to send a jarring link to a generic billing portal. Instead, the backend can issue a native `sendInvoice` command. 
 
 ```python
 await bot.send_invoice(
